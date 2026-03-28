@@ -1,20 +1,20 @@
 package com.openlinker.settings
 
+import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
+import com.intellij.ide.actions.RevealFileAction
+import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.options.ConfigurationException
+import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.ui.Messages
-import com.intellij.openapi.ui.Splitter
-import com.intellij.ui.AnActionButton
-import com.intellij.ui.ColoredListCellRenderer
 import com.intellij.ui.SimpleTextAttributes
-import com.intellij.ui.ToolbarDecorator
-import com.intellij.ui.components.JBCheckBox
+import com.intellij.ui.TableSpeedSearch
 import com.intellij.ui.components.JBLabel
-import com.intellij.ui.components.JBList
+import com.intellij.ui.components.JBPanel
 import com.intellij.ui.components.JBScrollPane
-import com.intellij.ui.components.JBTextArea
-import com.intellij.ui.components.JBTextField
+import com.intellij.ui.table.JBTable
 import com.intellij.util.ui.JBUI
 import com.openlinker.OpenLinkerConstants
 import com.openlinker.OpenLinkerIcons
@@ -24,75 +24,60 @@ import com.openlinker.model.normalized
 import com.openlinker.url.OpenLinkerContext
 import com.openlinker.url.OpenLinkerUrlTemplateResolver
 import java.awt.BorderLayout
-import java.awt.CardLayout
+import java.awt.Color
+import java.awt.Component
 import java.awt.Dimension
-import java.awt.FlowLayout
-import javax.swing.Box
-import javax.swing.BoxLayout
-import javax.swing.DefaultListModel
-import javax.swing.JButton
+import java.awt.Font
+import java.awt.event.KeyEvent
+import java.awt.event.MouseAdapter
+import java.awt.event.MouseEvent
+import java.nio.file.Files
+import javax.swing.AbstractAction
+import javax.swing.BorderFactory
+import javax.swing.JCheckBox
 import javax.swing.JComponent
 import javax.swing.JPanel
+import javax.swing.JTable
+import javax.swing.KeyStroke
 import javax.swing.ListSelectionModel
-import javax.swing.SwingUtilities
-import javax.swing.event.DocumentEvent
-import javax.swing.event.DocumentListener
+import javax.swing.SwingConstants
+import javax.swing.UIManager
+import javax.swing.table.AbstractTableModel
+import javax.swing.table.DefaultTableCellRenderer
+import javax.swing.table.TableCellRenderer
 
 class OpenLinkerSettingsPanel {
-    private val listModel = DefaultListModel<CustomUrlRule>()
-    private val ruleList = JBList(listModel)
-    private val nameField = JBTextField()
-    private val enabledCheckBox = JBCheckBox("Enabled")
-    private val urlTemplateArea = JBTextArea(6, 0)
-    private val detailCards = CardLayout()
-    private val detailPanel = JPanel(detailCards)
-    private var isUpdatingDetails = false
+    private val tableModel = RuleTableModel()
+    private val ruleTable = JBTable(tableModel)
 
     val component: JComponent
     val preferredFocusedComponent: JComponent
-        get() = if (ruleList.selectedIndex >= 0) nameField else ruleList
+        get() = ruleTable
 
     init {
-        configureRuleList()
-        configureEditors()
-        bindEditorListeners()
+        configureRuleTable()
 
-        val splitter = Splitter(false, 0.32f).apply {
-            firstComponent = buildRuleListPanel()
-            secondComponent = buildDetailPanel()
+        component = JBPanel<JBPanel<*>>(BorderLayout(0, JBUI.scale(10))).apply {
+            border = JBUI.Borders.empty(10)
+            add(buildHeaderPanel(), BorderLayout.NORTH)
+            add(buildTablePanel(), BorderLayout.CENTER)
         }
-
-        component = JPanel(BorderLayout(0, JBUI.scale(8))).apply {
-            border = JBUI.Borders.empty(8)
-            add(
-                JBLabel("Rules are shown in the same order as the action chooser."),
-                BorderLayout.NORTH,
-            )
-            add(splitter, BorderLayout.CENTER)
-        }
-
-        updateDetailView()
     }
 
     fun reset(rules: List<CustomUrlRule>) {
-        listModel.clear()
-        rules.normalized().forEach(listModel::addElement)
-
-        if (listModel.isEmpty) {
-            ruleList.clearSelection()
-            updateDetailView()
-        } else {
-            ruleList.selectedIndex = 0
+        tableModel.setRules(rules.normalized())
+        if (tableModel.rowCount > 0) {
+            selectRow(0)
         }
     }
 
     fun isModified(savedRules: List<CustomUrlRule>): Boolean {
-        return currentRules().normalized() != savedRules.normalized()
+        return tableModel.rules() != savedRules.normalized()
     }
 
     @Throws(ConfigurationException::class)
     fun getValidatedRules(): List<CustomUrlRule> {
-        val rules = currentRules().normalized()
+        val rules = tableModel.rules()
 
         rules.forEachIndexed { index, rule ->
             if (rule.name.isBlank()) {
@@ -106,251 +91,176 @@ class OpenLinkerSettingsPanel {
         return rules
     }
 
-    private fun configureRuleList() {
-        ruleList.selectionMode = ListSelectionModel.SINGLE_SELECTION
-        ruleList.emptyText.text = "No rules yet. Click + to add one."
-        ruleList.cellRenderer = object : ColoredListCellRenderer<CustomUrlRule>() {
-            override fun customizeCellRenderer(
-                list: javax.swing.JList<out CustomUrlRule>,
-                value: CustomUrlRule?,
-                index: Int,
-                selected: Boolean,
-                hasFocus: Boolean,
-            ) {
-                if (value == null) {
-                    return
-                }
+    private fun buildHeaderPanel(): JComponent {
+        val noteColor = UIManager.getColor("Label.disabledForeground")
+            ?: SimpleTextAttributes.GRAYED_ATTRIBUTES.fgColor
+            ?: Color.GRAY
 
-                append(value.name.ifBlank { "Untitled rule" })
-                if (!value.enabled) {
-                    append("  disabled", SimpleTextAttributes.GRAYED_ATTRIBUTES)
-                }
-                if (value.urlTemplate.isNotBlank()) {
-                    append("  ")
-                    append(value.urlTemplate, SimpleTextAttributes.GRAY_ATTRIBUTES)
-                }
-            }
-        }
-        ruleList.addListSelectionListener {
-            if (!it.valueIsAdjusting) {
-                updateDetailView()
-            }
-        }
-    }
-
-    private fun configureEditors() {
-        nameField.emptyText.text = "Google"
-        urlTemplateArea.emptyText.text = "https://www.google.com/search?q=\${PROJECT_NAME}"
-        urlTemplateArea.lineWrap = false
-        urlTemplateArea.wrapStyleWord = false
-        urlTemplateArea.border = JBUI.Borders.empty(6)
-    }
-
-    private fun bindEditorListeners() {
-        nameField.document.addDocumentListener(textChangeListener { text ->
-            updateSelectedRule { it.copy(name = text) }
-        })
-        urlTemplateArea.document.addDocumentListener(textChangeListener { text ->
-            updateSelectedRule { it.copy(urlTemplate = text) }
-        })
-        enabledCheckBox.addActionListener {
-            updateSelectedRule { it.copy(enabled = enabledCheckBox.isSelected) }
-        }
-    }
-
-    private fun buildRuleListPanel(): JComponent {
-        val decorator = ToolbarDecorator.createDecorator(ruleList)
-            .setAddAction { _ -> addRule() }
-            .setRemoveAction { _ -> removeRule() }
-            .setMoveUpAction { _ -> moveRule(-1) }
-            .setMoveDownAction { _ -> moveRule(1) }
-            .addExtraAction(OpenSelectedRuleActionButton())
-
-        return decorator.createPanel().apply {
-            preferredSize = Dimension(JBUI.scale(280), JBUI.scale(420))
-        }
-    }
-
-    private fun buildDetailPanel(): JComponent {
-        detailPanel.add(buildEmptyStatePanel(), EMPTY_CARD)
-        detailPanel.add(buildEditorPanel(), EDITOR_CARD)
-        return detailPanel
-    }
-
-    private fun buildEmptyStatePanel(): JComponent {
-        return JPanel(BorderLayout()).apply {
-            border = JBUI.Borders.empty(24)
+        return JBPanel<JBPanel<*>>(BorderLayout()).apply {
             add(
-                JBLabel(
-                    "<html><b>No rule selected</b><br/>Choose a rule on the left or click + to add one.</html>",
-                ),
+                JBLabel("Rules are shown in the same order as the action chooser.").apply {
+                    foreground = noteColor
+                },
                 BorderLayout.NORTH,
             )
         }
     }
 
-    private fun buildEditorPanel(): JComponent {
-        val urlScrollPane = JBScrollPane(urlTemplateArea).apply {
-            preferredSize = Dimension(0, JBUI.scale(150))
+    private fun buildTablePanel(): JComponent {
+        val toolbar = buildToolbar()
+        val scrollPane = JBScrollPane(ruleTable).apply {
+            border = BorderFactory.createEmptyBorder()
         }
 
-        val formPanel = JPanel().apply {
-            layout = BoxLayout(this, BoxLayout.Y_AXIS)
-            border = JBUI.Borders.empty(16)
-            add(labeled("Rule name", nameField))
-            add(Box.createVerticalStrut(JBUI.scale(12)))
-            add(enabledCheckBox)
-            add(Box.createVerticalStrut(JBUI.scale(12)))
-            add(labeled("URL template", urlScrollPane))
-            add(Box.createVerticalStrut(JBUI.scale(8)))
-            add(variableButtonsPanel())
-            add(Box.createVerticalStrut(JBUI.scale(8)))
-            add(
-                JBLabel(
-                    "<html>Supported variables: <code>\${PROJECT_NAME}</code>, <code>\${MODULE_NAME}</code>, " +
-                        "<code>\${FILE_NAME}</code>, <code>\${FILE_PATH}</code><br/>" +
-                        "Missing values are left empty when the action runs.</html>",
-                ),
+        return JBPanel<JBPanel<*>>(BorderLayout()).apply {
+            border = JBUI.Borders.compound(
+                JBUI.Borders.customLine(borderColor()),
+                JBUI.Borders.empty(0),
+            )
+            add(toolbar, BorderLayout.NORTH)
+            add(scrollPane, BorderLayout.CENTER)
+        }
+    }
+
+    private fun buildToolbar(): JComponent {
+        val actionGroup = DefaultActionGroup().apply {
+            add(AddRuleAction())
+            add(RemoveRuleAction())
+            add(EditRuleAction())
+            addSeparator()
+            add(MoveRuleAction(-1))
+            add(MoveRuleAction(1))
+            addSeparator()
+            add(OpenRuleAction())
+        }
+
+        val toolbar = ActionManager.getInstance().createActionToolbar("OpenLinkerSettingsToolbar", actionGroup, true)
+        toolbar.targetComponent = ruleTable
+
+        return toolbar.component.apply {
+            border = JBUI.Borders.compound(
+                JBUI.Borders.customLineBottom(borderColor()),
+                JBUI.Borders.empty(4, 8),
             )
         }
-
-        return JPanel(BorderLayout()).apply {
-            add(JBScrollPane(formPanel), BorderLayout.CENTER)
-        }
     }
 
-    private fun labeled(label: String, field: JComponent): JComponent {
-        return JPanel(BorderLayout(0, JBUI.scale(6))).apply {
-            add(JBLabel(label), BorderLayout.NORTH)
-            add(field, BorderLayout.CENTER)
-        }
-    }
+    private fun configureRuleTable() {
+        ruleTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION)
+        ruleTable.setShowGrid(false)
+        ruleTable.intercellSpacing = Dimension(0, 0)
+        ruleTable.rowHeight = JBUI.scale(38)
+        ruleTable.fillsViewportHeight = true
+        ruleTable.emptyText.text = "No rules yet. Click + to add one."
+        ruleTable.tableHeader.reorderingAllowed = false
+        ruleTable.tableHeader.resizingAllowed = true
+        ruleTable.font = Font(Font.MONOSPACED, Font.PLAIN, ruleTable.font.size)
 
-    private fun variableButtonsPanel(): JComponent {
-        return JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(8), 0)).apply {
-            add(JBLabel("Insert variable:"))
-            SUPPORTED_VARIABLES.forEach { variable ->
-                add(JButton(variable).apply {
-                    addActionListener {
-                        if (!urlTemplateArea.isEnabled) {
-                            return@addActionListener
-                        }
+        ruleTable.setDefaultRenderer(Boolean::class.java, EnabledCellRenderer())
+        ruleTable.columnModel.getColumn(COLUMN_ENABLED).preferredWidth = JBUI.scale(88)
+        ruleTable.columnModel.getColumn(COLUMN_ENABLED).maxWidth = JBUI.scale(88)
+        ruleTable.columnModel.getColumn(COLUMN_NAME).preferredWidth = JBUI.scale(220)
+        ruleTable.columnModel.getColumn(COLUMN_TEMPLATE).preferredWidth = JBUI.scale(540)
+        ruleTable.columnModel.getColumn(COLUMN_NAME).cellRenderer = RuleTextRenderer(tableModel, COLUMN_NAME)
+        ruleTable.columnModel.getColumn(COLUMN_TEMPLATE).cellRenderer = RuleTextRenderer(tableModel, COLUMN_TEMPLATE)
 
-                        urlTemplateArea.requestFocusInWindow()
-                        urlTemplateArea.replaceSelection(variable)
-                    }
-                })
+        TableSpeedSearch(ruleTable)
+
+        ruleTable.addMouseListener(object : MouseAdapter() {
+            override fun mouseClicked(event: MouseEvent) {
+                if (event.clickCount == 2 && event.button == MouseEvent.BUTTON1 && selectedRow() >= 0) {
+                    editSelectedRule()
+                }
             }
-        }
+        })
+
+        ruleTable.inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "editRule")
+        ruleTable.actionMap.put("editRule", object : AbstractAction() {
+            override fun actionPerformed(event: java.awt.event.ActionEvent?) {
+                editSelectedRule()
+            }
+        })
     }
 
     private fun addRule() {
-        val rule = CustomUrlRule(
-            name = "New Rule",
-            urlTemplate = "https://",
-            enabled = true,
-        )
-        listModel.addElement(rule)
-        ruleList.selectedIndex = listModel.size() - 1
-        SwingUtilities.invokeLater {
-            nameField.requestFocusInWindow()
-            nameField.selectAll()
+        val dialog = OpenLinkerRuleDialog()
+        if (!dialog.showAndGet()) {
+            return
+        }
+
+        val row = tableModel.addRule(dialog.getRule())
+        selectRow(row)
+    }
+
+    private fun editSelectedRule() {
+        val row = selectedRow()
+        if (row < 0) {
+            return
+        }
+
+        val dialog = OpenLinkerRuleDialog(tableModel.getRule(row))
+        if (!dialog.showAndGet()) {
+            return
+        }
+
+        tableModel.updateRule(row, dialog.getRule())
+        selectRow(row)
+    }
+
+    private fun removeSelectedRule() {
+        val row = selectedRow()
+        if (row < 0) {
+            return
+        }
+
+        tableModel.removeRule(row)
+        if (tableModel.rowCount > 0) {
+            selectRow(row.coerceAtMost(tableModel.rowCount - 1))
         }
     }
 
-    private fun removeRule() {
-        val index = ruleList.selectedIndex
-        if (index < 0) {
+    private fun moveSelectedRule(offset: Int) {
+        val row = selectedRow()
+        if (row < 0) {
             return
         }
 
-        listModel.remove(index)
-
-        if (listModel.isEmpty) {
-            ruleList.clearSelection()
-            updateDetailView()
+        val targetRow = row + offset
+        if (targetRow !in 0 until tableModel.rowCount) {
             return
         }
 
-        ruleList.selectedIndex = index.coerceAtMost(listModel.size() - 1)
-    }
-
-    private fun moveRule(offset: Int) {
-        val index = ruleList.selectedIndex
-        if (index < 0) {
-            return
-        }
-
-        val targetIndex = index + offset
-        if (targetIndex !in 0 until listModel.size()) {
-            return
-        }
-
-        val rule = listModel.remove(index)
-        listModel.add(targetIndex, rule)
-        ruleList.selectedIndex = targetIndex
-    }
-
-    private fun updateSelectedRule(update: (CustomUrlRule) -> CustomUrlRule) {
-        if (isUpdatingDetails) {
-            return
-        }
-
-        val index = ruleList.selectedIndex
-        if (index < 0) {
-            return
-        }
-
-        val updatedRule = update(listModel.getElementAt(index))
-        listModel.set(index, updatedRule)
-        ruleList.selectedIndex = index
-    }
-
-    private fun updateDetailView() {
-        val selectedRule = ruleList.selectedValue
-        if (selectedRule == null) {
-            isUpdatingDetails = true
-            try {
-                nameField.text = ""
-                urlTemplateArea.text = ""
-                enabledCheckBox.isSelected = false
-                setEditorEnabled(false)
-                detailCards.show(detailPanel, EMPTY_CARD)
-            } finally {
-                isUpdatingDetails = false
-            }
-            return
-        }
-
-        isUpdatingDetails = true
-        try {
-            setEditorEnabled(true)
-            nameField.text = selectedRule.name
-            urlTemplateArea.text = selectedRule.urlTemplate
-            enabledCheckBox.isSelected = selectedRule.enabled
-            detailCards.show(detailPanel, EDITOR_CARD)
-        } finally {
-            isUpdatingDetails = false
-        }
-    }
-
-    private fun setEditorEnabled(enabled: Boolean) {
-        nameField.isEnabled = enabled
-        enabledCheckBox.isEnabled = enabled
-        urlTemplateArea.isEnabled = enabled
-    }
-
-    private fun currentRules(): List<CustomUrlRule> = List(listModel.size()) { index ->
-        listModel.getElementAt(index)
+        tableModel.swap(row, targetRow)
+        selectRow(targetRow)
     }
 
     private fun openSelectedRule() {
-        val resolvedUrl = selectedResolvedUrl()
+        val rule = selectedRule() ?: return
+        val resolvedUrl = OpenLinkerUrlTemplateResolver.resolve(rule.urlTemplate, OpenLinkerContext()).trim()
+
         if (!OpenLinkerResolvedUrl.canOpen(resolvedUrl)) {
             Messages.showWarningDialog(
                 "The selected rule does not currently produce a usable address.",
                 OpenLinkerConstants.PLUGIN_NAME,
             )
+            return
+        }
+
+        val localPath = OpenLinkerResolvedUrl.toLocalPath(resolvedUrl)
+        if (localPath != null) {
+            if (!Files.exists(localPath)) {
+                Messages.showWarningDialog(
+                    "OpenLinker could not find this file or folder:\n$localPath",
+                    OpenLinkerConstants.PLUGIN_NAME,
+                )
+                return
+            }
+
+            if (Files.isDirectory(localPath)) {
+                RevealFileAction.openDirectory(localPath)
+            } else {
+                RevealFileAction.openFile(localPath)
+            }
             return
         }
 
@@ -364,42 +274,216 @@ class OpenLinkerSettingsPanel {
         }
     }
 
-    private fun selectedResolvedUrl(): String {
-        val template = ruleList.selectedValue?.urlTemplate.orEmpty()
-        return OpenLinkerUrlTemplateResolver.resolve(template, OpenLinkerContext()).trim()
+    private fun selectedRow(): Int = ruleTable.selectedRow
+
+    private fun selectedRule(): CustomUrlRule? {
+        val row = selectedRow()
+        return if (row >= 0) tableModel.getRule(row) else null
     }
 
-    private fun textChangeListener(onChange: (String) -> Unit): DocumentListener = object : DocumentListener {
-        override fun insertUpdate(event: DocumentEvent) = onChange(event)
+    private fun selectRow(row: Int) {
+        if (row !in 0 until tableModel.rowCount) {
+            return
+        }
 
-        override fun removeUpdate(event: DocumentEvent) = onChange(event)
+        ruleTable.selectionModel.setSelectionInterval(row, row)
+        ruleTable.scrollRectToVisible(ruleTable.getCellRect(row, 0, true))
+    }
 
-        override fun changedUpdate(event: DocumentEvent) = onChange(event)
+    private fun borderColor(): Color {
+        return UIManager.getColor("Component.borderColor")
+            ?: UIManager.getColor("Table.gridColor")
+            ?: UIManager.getColor("Separator.foreground")
+            ?: Color.GRAY
+    }
 
-        private fun onChange(event: DocumentEvent) {
-            onChange(event.document.getText(0, event.document.length))
+    private class RuleTableModel : AbstractTableModel() {
+        private val rules = mutableListOf<CustomUrlRule>()
+
+        override fun getRowCount(): Int = rules.size
+
+        override fun getColumnCount(): Int = 3
+
+        override fun getColumnName(column: Int): String = when (column) {
+            COLUMN_ENABLED -> "Enabled"
+            COLUMN_NAME -> "Rule Name"
+            COLUMN_TEMPLATE -> "Configuration"
+            else -> ""
+        }
+
+        override fun getColumnClass(columnIndex: Int): Class<*> = when (columnIndex) {
+            COLUMN_ENABLED -> java.lang.Boolean::class.java
+            else -> String::class.java
+        }
+
+        override fun getValueAt(rowIndex: Int, columnIndex: Int): Any = when (columnIndex) {
+            COLUMN_ENABLED -> rules[rowIndex].enabled
+            COLUMN_NAME -> rules[rowIndex].name
+            COLUMN_TEMPLATE -> rules[rowIndex].urlTemplate
+            else -> ""
+        }
+
+        override fun isCellEditable(rowIndex: Int, columnIndex: Int): Boolean = false
+
+        fun setRules(rules: List<CustomUrlRule>) {
+            this.rules.clear()
+            this.rules.addAll(rules.normalized())
+            fireTableDataChanged()
+        }
+
+        fun rules(): List<CustomUrlRule> = rules.toList().normalized()
+
+        fun getRule(row: Int): CustomUrlRule = rules[row]
+
+        fun addRule(rule: CustomUrlRule): Int {
+            val row = rules.size
+            rules.add(rule.normalized())
+            fireTableRowsInserted(row, row)
+            return row
+        }
+
+        fun updateRule(row: Int, rule: CustomUrlRule) {
+            rules[row] = rule.normalized()
+            fireTableRowsUpdated(row, row)
+        }
+
+        fun removeRule(row: Int) {
+            rules.removeAt(row)
+            fireTableRowsDeleted(row, row)
+        }
+
+        fun swap(first: Int, second: Int) {
+            val firstRule = rules[first]
+            rules[first] = rules[second]
+            rules[second] = firstRule
+            fireTableRowsUpdated(minOf(first, second), maxOf(first, second))
         }
     }
 
-    private companion object {
-        const val EMPTY_CARD = "empty"
-        const val EDITOR_CARD = "editor"
-        val SUPPORTED_VARIABLES = listOf(
-            "\${PROJECT_NAME}",
-            "\${MODULE_NAME}",
-            "\${FILE_NAME}",
-            "\${FILE_PATH}",
-        )
+    private class EnabledCellRenderer : JPanel(BorderLayout()), TableCellRenderer {
+        private val checkBox = JCheckBox()
+
+        init {
+            isOpaque = true
+            border = JBUI.Borders.empty(0, 12)
+            checkBox.isOpaque = false
+            checkBox.horizontalAlignment = SwingConstants.CENTER
+            add(checkBox, BorderLayout.CENTER)
+        }
+
+        override fun getTableCellRendererComponent(
+            table: JTable,
+            value: Any?,
+            isSelected: Boolean,
+            hasFocus: Boolean,
+            row: Int,
+            column: Int,
+        ): Component {
+            checkBox.isSelected = value as? Boolean ?: false
+            background = if (isSelected) table.selectionBackground else table.background
+            foreground = if (isSelected) table.selectionForeground else table.foreground
+            return this
+        }
     }
 
-    private inner class OpenSelectedRuleActionButton : AnActionButton("Open Selected", OpenLinkerIcons.BROWSER_OPEN) {
+    private class RuleTextRenderer(
+        private val tableModel: RuleTableModel,
+        private val column: Int,
+    ) : DefaultTableCellRenderer() {
+        override fun getTableCellRendererComponent(
+            table: JTable,
+            value: Any?,
+            isSelected: Boolean,
+            hasFocus: Boolean,
+            row: Int,
+            column: Int,
+        ): Component {
+            super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column)
+
+            val rule = tableModel.getRule(row)
+            text = value?.toString().orEmpty().ifBlank {
+                if (this.column == COLUMN_NAME) "Untitled rule" else ""
+            }
+            font = if (this.column == COLUMN_NAME) {
+                table.font.deriveFont(Font.BOLD, table.font.size2D)
+            } else {
+                table.font
+            }
+            border = JBUI.Borders.empty(0, 12)
+            horizontalAlignment = SwingConstants.LEFT
+
+            if (!isSelected && !rule.enabled) {
+                foreground = UIManager.getColor("Label.disabledForeground")
+                    ?: SimpleTextAttributes.GRAYED_ATTRIBUTES.fgColor
+                    ?: foreground
+            }
+
+            return this
+        }
+    }
+
+    private inner class AddRuleAction : DumbAwareAction("", "Add rule", AllIcons.General.Add) {
+        override fun actionPerformed(event: AnActionEvent) {
+            addRule()
+        }
+    }
+
+    private inner class RemoveRuleAction : DumbAwareAction("", "Remove selected rule", AllIcons.General.Remove) {
+        override fun actionPerformed(event: AnActionEvent) {
+            removeSelectedRule()
+        }
+
+        override fun update(event: AnActionEvent) {
+            event.presentation.isEnabled = selectedRow() >= 0
+        }
+    }
+
+    private inner class EditRuleAction : DumbAwareAction("", "Edit selected rule", AllIcons.Actions.Edit) {
+        override fun actionPerformed(event: AnActionEvent) {
+            editSelectedRule()
+        }
+
+        override fun update(event: AnActionEvent) {
+            event.presentation.isEnabled = selectedRow() >= 0
+        }
+    }
+
+    private inner class MoveRuleAction(private val offset: Int) : DumbAwareAction(
+        "",
+        if (offset < 0) "Move selected rule up" else "Move selected rule down",
+        if (offset < 0) AllIcons.Actions.MoveUp else AllIcons.Actions.MoveDown,
+    ) {
+        override fun actionPerformed(event: AnActionEvent) {
+            moveSelectedRule(offset)
+        }
+
+        override fun update(event: AnActionEvent) {
+            val row = selectedRow()
+            event.presentation.isEnabled = when {
+                row < 0 -> false
+                offset < 0 -> row > 0
+                else -> row < tableModel.rowCount - 1
+            }
+        }
+    }
+
+    private inner class OpenRuleAction : DumbAwareAction("", "Open selected rule", OpenLinkerIcons.BROWSER_OPEN) {
         override fun actionPerformed(event: AnActionEvent) {
             openSelectedRule()
         }
 
-        override fun updateButton(event: AnActionEvent) {
-            super.updateButton(event)
-            event.presentation.isEnabled = OpenLinkerResolvedUrl.canOpen(selectedResolvedUrl())
+        override fun update(event: AnActionEvent) {
+            val rule = selectedRule()
+            val resolvedUrl = rule?.let {
+                OpenLinkerUrlTemplateResolver.resolve(it.urlTemplate, OpenLinkerContext()).trim()
+            }.orEmpty()
+            event.presentation.isEnabled = OpenLinkerResolvedUrl.canOpen(resolvedUrl)
         }
+    }
+
+    private companion object {
+        const val COLUMN_ENABLED = 0
+        const val COLUMN_NAME = 1
+        const val COLUMN_TEMPLATE = 2
     }
 }
