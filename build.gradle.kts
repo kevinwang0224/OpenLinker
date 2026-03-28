@@ -1,0 +1,55 @@
+plugins {
+    kotlin("jvm") version "1.9.24"
+    id("org.jetbrains.intellij.platform") version "2.11.0"
+}
+
+group = "com.openlinker"
+version = "0.1.2"
+
+repositories {
+    mavenCentral()
+
+    intellijPlatform {
+        defaultRepositories()
+    }
+}
+
+dependencies {
+    intellijPlatform {
+        intellijIdeaCommunity("2023.1")
+        testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
+    }
+
+    testImplementation(kotlin("test"))
+    testImplementation("junit:junit:4.13.2")
+}
+
+kotlin {
+    jvmToolchain(17)
+}
+
+intellijPlatform {
+    projectName = project.name
+
+    pluginConfiguration {
+        id = "com.openlinker"
+        name = "OpenLinker"
+        version = project.version.toString()
+        description = "Open browser URLs from configurable OpenLinker rules."
+
+        ideaVersion {
+            sinceBuild = "231"
+            untilBuild = provider { null }
+        }
+
+        vendor {
+            name = "OpenLinker"
+        }
+    }
+}
+
+tasks {
+    test {
+        useJUnitPlatform()
+    }
+}

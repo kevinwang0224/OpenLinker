@@ -1,0 +1,15 @@
+# Build outputs
+build/
+out/
+
+# Gradle local state
+.gradle/
+.kotlin/
+
+# IntelliJ local files
+.idea/
+*.iml
+.intellijPlatform/
+
+# OS files
+.DS_Store
