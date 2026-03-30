@@ -1,11 +1,11 @@
 # OpenLinker
 
-OpenLinker 是一个 IntelliJ IDEA 插件工程示例。它提供一个 `Open Custom URL` 按钮，并在 `Settings > Tools > OpenLinker` 里管理多条 URL 规则。
+OpenLinker 是一个 IntelliJ IDEA 插件工程示例。它提供一个 `OpenLinker` 按钮，并在 `Settings > Tools > OpenLinker` 里管理多条 URL 规则。
 
 ## 功能
 
-- 提供一个 `Open Custom URL` Action，入口在 `Tools` 菜单
-- 在顶部工具栏和右下角状态栏各放一个 `OpenLinker` 图标，点击后会在图标旁边弹出一个小菜单
+- 提供一个 `OpenLinker` Action，入口在 `Tools` 菜单
+- 在顶部工具栏放一个 `OpenLinker` 图标，点击后会在图标旁边弹出一个小菜单
 - 支持多条规则，每条规则包含：
   - `name`
   - `urlTemplate`
@@ -23,6 +23,7 @@ OpenLinker 是一个 IntelliJ IDEA 插件工程示例。它提供一个 `Open Cu
 - `file://` 地址会在系统文件管理器里定位到文件或目录
 - 使用 `PersistentStateComponent` 持久化配置
 - 设置页左边规则栏带一个快速打开按钮，选中后可以直接点开
+- 支持把规则导出成 JSON 文件，也支持从 JSON 文件追加导入，方便团队共享
 - 默认内置规则：
   - `Google -> https://www.google.com/search?q=${PROJECT_NAME}`
   - `File -> file://${FILE_PATH}`
@@ -47,8 +48,28 @@ OpenLinker 是一个 IntelliJ IDEA 插件工程示例。它提供一个 `Open Cu
 ## 使用方式
 
 1. 打开 `Settings > Tools > OpenLinker`
-2. 添加或修改规则
-3. 在菜单里点击 `Tools > Open Custom URL`
+2. 添加、修改、导入或导出规则
+3. 在菜单里点击 `Tools > OpenLinker`
+
+### 导入导出
+
+- 导出入口在设置页工具栏，支持导出全部规则，或只导出当前选中的规则
+- 导入入口也在设置页工具栏，导入内容会追加到当前列表末尾
+- 导入后的变更和普通编辑一样，要点 `Apply` 或 `OK` 才会真正保存
+- 导入导出文件使用 JSON，结构如下：
+
+```json
+{
+  "version": 1,
+  "rules": [
+    {
+      "name": "Google",
+      "urlTemplate": "https://www.google.com/search?q=${PROJECT_NAME}",
+      "enabled": true
+    }
+  ]
+}
+```
 
 ## 变量说明
 
@@ -63,6 +84,7 @@ OpenLinker 是一个 IntelliJ IDEA 插件工程示例。它提供一个 `Open Cu
 
 - 默认规则是否存在
 - 规则保存后的读取结果
+- 规则导入导出的 JSON 格式和校验
 - URL 模板变量替换
 - 0 条 / 1 条 / 多条启用规则的分支判断
 

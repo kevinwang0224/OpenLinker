@@ -3,11 +3,17 @@ package com.openlinker.settings
 import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
 import com.intellij.ide.actions.RevealFileAction
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.fileChooser.FileChooser
+import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
+import com.intellij.openapi.fileChooser.FileChooserFactory
+import com.intellij.openapi.fileChooser.FileSaverDescriptor
 import com.intellij.openapi.options.ConfigurationException
 import com.intellij.openapi.project.DumbAwareAction
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.ui.SimpleTextAttributes
 import com.intellij.ui.TableSpeedSearch
@@ -31,7 +37,9 @@ import java.awt.Font
 import java.awt.event.KeyEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
+import java.io.IOException
 import java.nio.file.Files
+import java.nio.file.Path
 import javax.swing.AbstractAction
 import javax.swing.BorderFactory
 import javax.swing.JCheckBox
@@ -68,6 +76,8 @@ class OpenLinkerSettingsPanel {
         tableModel.setRules(rules.normalized())
         if (tableModel.rowCount > 0) {
             selectRow(0)
+        } else {
+            ruleTable.clearSelection()
         }
     }
 
@@ -91,6 +101,34 @@ class OpenLinkerSettingsPanel {
         return rules
     }
 
+    internal fun appendRules(rules: List<CustomUrlRule>): IntRange? {
+        val insertedRange = tableModel.addRules(rules)
+        if (insertedRange != null) {
+            selectRange(insertedRange.first, insertedRange.last)
+        }
+        return insertedRange
+    }
+
+    internal fun selectRowsForTesting(vararg rows: Int) {
+        ruleTable.clearSelection()
+        rows.sorted().forEach { row ->
+            if (row in 0 until tableModel.rowCount) {
+                ruleTable.selectionModel.addSelectionInterval(row, row)
+            }
+        }
+    }
+
+    internal fun selectedRulesForTesting(): List<CustomUrlRule> = selectedRules()
+
+    internal fun toolbarActionState(): ToolbarActionState = ToolbarActionState(
+        canRemove = hasSelection(),
+        canEdit = hasSingleSelection(),
+        canMoveUp = canMoveSelected(-1),
+        canMoveDown = canMoveSelected(1),
+        canOpen = canOpenSelectedRule(),
+        canExportSelected = hasSelection(),
+    )
+
     private fun buildHeaderPanel(): JComponent {
         val noteColor = UIManager.getColor("Label.disabledForeground")
             ?: SimpleTextAttributes.GRAYED_ATTRIBUTES.fgColor
@@ -98,7 +136,10 @@ class OpenLinkerSettingsPanel {
 
         return JBPanel<JBPanel<*>>(BorderLayout()).apply {
             add(
-                JBLabel("Rules are shown in the same order as the action chooser.").apply {
+                JBLabel(
+                    "<html>Rules are shown in the same order as the action chooser.<br/>" +
+                        "Import or export JSON files here when sharing rules with your team.</html>",
+                ).apply {
                     foreground = noteColor
                 },
                 BorderLayout.NORTH,
@@ -123,6 +164,15 @@ class OpenLinkerSettingsPanel {
     }
 
     private fun buildToolbar(): JComponent {
+        if (ApplicationManager.getApplication() == null) {
+            return JBPanel<JBPanel<*>>(BorderLayout()).apply {
+                border = JBUI.Borders.compound(
+                    JBUI.Borders.customLineBottom(borderColor()),
+                    JBUI.Borders.empty(4, 8),
+                )
+            }
+        }
+
         val actionGroup = DefaultActionGroup().apply {
             add(AddRuleAction())
             add(RemoveRuleAction())
@@ -132,6 +182,10 @@ class OpenLinkerSettingsPanel {
             add(MoveRuleAction(1))
             addSeparator()
             add(OpenRuleAction())
+            addSeparator()
+            add(ImportRulesAction())
+            add(ExportSelectedRulesAction())
+            add(ExportAllRulesAction())
         }
 
         val toolbar = ActionManager.getInstance().createActionToolbar("OpenLinkerSettingsToolbar", actionGroup, true)
@@ -146,7 +200,7 @@ class OpenLinkerSettingsPanel {
     }
 
     private fun configureRuleTable() {
-        ruleTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION)
+        ruleTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION)
         ruleTable.setShowGrid(false)
         ruleTable.intercellSpacing = Dimension(0, 0)
         ruleTable.rowHeight = JBUI.scale(38)
@@ -164,11 +218,13 @@ class OpenLinkerSettingsPanel {
         ruleTable.columnModel.getColumn(COLUMN_NAME).cellRenderer = RuleTextRenderer(tableModel, COLUMN_NAME)
         ruleTable.columnModel.getColumn(COLUMN_TEMPLATE).cellRenderer = RuleTextRenderer(tableModel, COLUMN_TEMPLATE)
 
-        TableSpeedSearch(ruleTable)
+        if (ApplicationManager.getApplication() != null) {
+            TableSpeedSearch(ruleTable)
+        }
 
         ruleTable.addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(event: MouseEvent) {
-                if (event.clickCount == 2 && event.button == MouseEvent.BUTTON1 && selectedRow() >= 0) {
+                if (event.clickCount == 2 && event.button == MouseEvent.BUTTON1 && hasSingleSelection()) {
                     editSelectedRule()
                 }
             }
@@ -193,7 +249,7 @@ class OpenLinkerSettingsPanel {
     }
 
     private fun editSelectedRule() {
-        val row = selectedRow()
+        val row = selectedSingleRow()
         if (row < 0) {
             return
         }
@@ -207,20 +263,21 @@ class OpenLinkerSettingsPanel {
         selectRow(row)
     }
 
-    private fun removeSelectedRule() {
-        val row = selectedRow()
-        if (row < 0) {
+    private fun removeSelectedRules() {
+        val rows = selectedRows()
+        if (rows.isEmpty()) {
             return
         }
 
-        tableModel.removeRule(row)
+        val nextRow = rows.first()
+        tableModel.removeRules(rows)
         if (tableModel.rowCount > 0) {
-            selectRow(row.coerceAtMost(tableModel.rowCount - 1))
+            selectRow(nextRow.coerceAtMost(tableModel.rowCount - 1))
         }
     }
 
     private fun moveSelectedRule(offset: Int) {
-        val row = selectedRow()
+        val row = selectedSingleRow()
         if (row < 0) {
             return
         }
@@ -232,6 +289,65 @@ class OpenLinkerSettingsPanel {
 
         tableModel.swap(row, targetRow)
         selectRow(targetRow)
+    }
+
+    private fun importRules() {
+        val path = chooseImportPath() ?: return
+
+        val result = try {
+            OpenLinkerRuleFileTransfer.importRules(path)
+        } catch (exception: OpenLinkerRuleFileTransfer.RuleFileException) {
+            Messages.showErrorDialog(
+                "OpenLinker could not import rules from this file:\n${exception.message}",
+                OpenLinkerConstants.PLUGIN_NAME,
+            )
+            return
+        } catch (_: IOException) {
+            Messages.showErrorDialog(
+                "OpenLinker could not read this file:\n$path",
+                OpenLinkerConstants.PLUGIN_NAME,
+            )
+            return
+        }
+
+        val insertedRange = appendRules(result.rules)
+        if (insertedRange != null) {
+            selectRange(insertedRange.first, insertedRange.last)
+        }
+
+        showImportResult(result)
+    }
+
+    private fun exportSelectedRules() {
+        exportRules(selectedRules(), "selected")
+    }
+
+    private fun exportAllRules() {
+        exportRules(tableModel.rules(), "all")
+    }
+
+    private fun exportRules(rules: List<CustomUrlRule>, scopeLabel: String) {
+        if (rules.isEmpty()) {
+            Messages.showWarningDialog(
+                "There are no $scopeLabel rules to export.",
+                OpenLinkerConstants.PLUGIN_NAME,
+            )
+            return
+        }
+
+        val path = chooseExportPath() ?: return
+        try {
+            OpenLinkerRuleFileTransfer.exportRules(path, rules)
+            Messages.showInfoMessage(
+                "Exported ${rules.size} rule(s) to:\n$path",
+                OpenLinkerConstants.PLUGIN_NAME,
+            )
+        } catch (_: IOException) {
+            Messages.showErrorDialog(
+                "OpenLinker could not write this file:\n$path",
+                OpenLinkerConstants.PLUGIN_NAME,
+            )
+        }
     }
 
     private fun openSelectedRule() {
@@ -274,11 +390,37 @@ class OpenLinkerSettingsPanel {
         }
     }
 
-    private fun selectedRow(): Int = ruleTable.selectedRow
-
     private fun selectedRule(): CustomUrlRule? {
-        val row = selectedRow()
+        val row = selectedSingleRow()
         return if (row >= 0) tableModel.getRule(row) else null
+    }
+
+    private fun selectedSingleRow(): Int {
+        val rows = selectedRows()
+        return if (rows.size == 1) rows[0] else -1
+    }
+
+    private fun selectedRows(): IntArray = ruleTable.selectedRows.sortedArray()
+
+    private fun selectedRules(): List<CustomUrlRule> = selectedRows().map(tableModel::getRule)
+
+    private fun hasSelection(): Boolean = selectedRows().isNotEmpty()
+
+    private fun hasSingleSelection(): Boolean = selectedRows().size == 1
+
+    private fun canMoveSelected(offset: Int): Boolean {
+        val row = selectedSingleRow()
+        return when {
+            row < 0 -> false
+            offset < 0 -> row > 0
+            else -> row < tableModel.rowCount - 1
+        }
+    }
+
+    private fun canOpenSelectedRule(): Boolean {
+        val rule = selectedRule() ?: return false
+        val resolvedUrl = OpenLinkerUrlTemplateResolver.resolve(rule.urlTemplate, OpenLinkerContext()).trim()
+        return OpenLinkerResolvedUrl.canOpen(resolvedUrl)
     }
 
     private fun selectRow(row: Int) {
@@ -290,12 +432,72 @@ class OpenLinkerSettingsPanel {
         ruleTable.scrollRectToVisible(ruleTable.getCellRect(row, 0, true))
     }
 
+    private fun selectRange(firstRow: Int, lastRow: Int) {
+        if (firstRow !in 0 until tableModel.rowCount || lastRow !in 0 until tableModel.rowCount) {
+            return
+        }
+
+        ruleTable.selectionModel.setSelectionInterval(firstRow, lastRow)
+        ruleTable.scrollRectToVisible(ruleTable.getCellRect(lastRow, 0, true))
+    }
+
+    private fun chooseImportPath(): Path? {
+        val descriptor = FileChooserDescriptorFactory.createSingleFileDescriptor("json").apply {
+            title = "Import OpenLinker Rules"
+            description = "Choose a JSON file exported from OpenLinker."
+        }
+
+        val selectedFile = FileChooser.chooseFile(descriptor, null as Project?, null) ?: return null
+        return Path.of(selectedFile.path)
+    }
+
+    private fun chooseExportPath(): Path? {
+        val descriptor = FileSaverDescriptor(
+            "Export OpenLinker Rules",
+            "Choose where to save the exported OpenLinker rule file.",
+            "json",
+        )
+        val saveDialog = FileChooserFactory.getInstance().createSaveFileDialog(descriptor, null as Project?)
+        val selectedFile = saveDialog.save(null as Path?, OpenLinkerRuleFileTransfer.DEFAULT_FILE_NAME) ?: return null
+        return selectedFile.file.toPath()
+    }
+
+    private fun showImportResult(result: OpenLinkerRuleFileTransfer.ImportResult) {
+        val message = buildString {
+            append("Imported ${result.rules.size} rule(s).")
+            if (result.skippedEntries.isNotEmpty()) {
+                append("\n\nSkipped ${result.skippedEntries.size} invalid entr")
+                append(if (result.skippedEntries.size == 1) "y" else "ies")
+                append(":\n")
+                result.skippedEntries.forEach { issue ->
+                    append("- Entry ${issue.entryIndex}: ${issue.reason}\n")
+                }
+            }
+        }.trimEnd()
+
+        if (result.rules.isEmpty() && result.skippedEntries.isNotEmpty()) {
+            Messages.showWarningDialog(message, OpenLinkerConstants.PLUGIN_NAME)
+            return
+        }
+
+        Messages.showInfoMessage(message, OpenLinkerConstants.PLUGIN_NAME)
+    }
+
     private fun borderColor(): Color {
         return UIManager.getColor("Component.borderColor")
             ?: UIManager.getColor("Table.gridColor")
             ?: UIManager.getColor("Separator.foreground")
             ?: Color.GRAY
     }
+
+    internal data class ToolbarActionState(
+        val canRemove: Boolean,
+        val canEdit: Boolean,
+        val canMoveUp: Boolean,
+        val canMoveDown: Boolean,
+        val canOpen: Boolean,
+        val canExportSelected: Boolean,
+    )
 
     private class RuleTableModel : AbstractTableModel() {
         private val rules = mutableListOf<CustomUrlRule>()
@@ -342,14 +544,28 @@ class OpenLinkerSettingsPanel {
             return row
         }
 
+        fun addRules(rules: List<CustomUrlRule>): IntRange? {
+            if (rules.isEmpty()) {
+                return null
+            }
+
+            val startRow = this.rules.size
+            this.rules.addAll(rules.normalized())
+            val endRow = this.rules.size - 1
+            fireTableRowsInserted(startRow, endRow)
+            return startRow..endRow
+        }
+
         fun updateRule(row: Int, rule: CustomUrlRule) {
             rules[row] = rule.normalized()
             fireTableRowsUpdated(row, row)
         }
 
-        fun removeRule(row: Int) {
-            rules.removeAt(row)
-            fireTableRowsDeleted(row, row)
+        fun removeRules(rows: IntArray) {
+            rows.sortedDescending().forEach { row ->
+                rules.removeAt(row)
+            }
+            fireTableDataChanged()
         }
 
         fun swap(first: Int, second: Int) {
@@ -430,11 +646,11 @@ class OpenLinkerSettingsPanel {
 
     private inner class RemoveRuleAction : DumbAwareAction("", "Remove selected rule", AllIcons.General.Remove) {
         override fun actionPerformed(event: AnActionEvent) {
-            removeSelectedRule()
+            removeSelectedRules()
         }
 
         override fun update(event: AnActionEvent) {
-            event.presentation.isEnabled = selectedRow() >= 0
+            event.presentation.isEnabled = hasSelection()
         }
     }
 
@@ -444,7 +660,7 @@ class OpenLinkerSettingsPanel {
         }
 
         override fun update(event: AnActionEvent) {
-            event.presentation.isEnabled = selectedRow() >= 0
+            event.presentation.isEnabled = hasSingleSelection()
         }
     }
 
@@ -458,12 +674,7 @@ class OpenLinkerSettingsPanel {
         }
 
         override fun update(event: AnActionEvent) {
-            val row = selectedRow()
-            event.presentation.isEnabled = when {
-                row < 0 -> false
-                offset < 0 -> row > 0
-                else -> row < tableModel.rowCount - 1
-            }
+            event.presentation.isEnabled = canMoveSelected(offset)
         }
     }
 
@@ -473,11 +684,45 @@ class OpenLinkerSettingsPanel {
         }
 
         override fun update(event: AnActionEvent) {
-            val rule = selectedRule()
-            val resolvedUrl = rule?.let {
-                OpenLinkerUrlTemplateResolver.resolve(it.urlTemplate, OpenLinkerContext()).trim()
-            }.orEmpty()
-            event.presentation.isEnabled = OpenLinkerResolvedUrl.canOpen(resolvedUrl)
+            event.presentation.isEnabled = canOpenSelectedRule()
+        }
+    }
+
+    private inner class ImportRulesAction : DumbAwareAction(
+        "Import",
+        "Import rules from a JSON file",
+        OpenLinkerIcons.RULE_IMPORT,
+    ) {
+        override fun actionPerformed(event: AnActionEvent) {
+            importRules()
+        }
+    }
+
+    private inner class ExportSelectedRulesAction : DumbAwareAction(
+        "Export Selected",
+        "Export selected rules to a JSON file",
+        OpenLinkerIcons.RULE_EXPORT_SELECTED,
+    ) {
+        override fun actionPerformed(event: AnActionEvent) {
+            exportSelectedRules()
+        }
+
+        override fun update(event: AnActionEvent) {
+            event.presentation.isEnabled = hasSelection()
+        }
+    }
+
+    private inner class ExportAllRulesAction : DumbAwareAction(
+        "Export All",
+        "Export all rules to a JSON file",
+        OpenLinkerIcons.RULE_EXPORT_ALL,
+    ) {
+        override fun actionPerformed(event: AnActionEvent) {
+            exportAllRules()
+        }
+
+        override fun update(event: AnActionEvent) {
+            event.presentation.isEnabled = tableModel.rowCount > 0
         }
     }
 

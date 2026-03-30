@@ -7,9 +7,6 @@
                 displayName="OpenLinker"
                 parentId="tools"
                 instance="com.openlinker.settings.OpenLinkerConfigurable"/>
-        <statusBarWidgetFactory
-                id="OpenLinkerStatusBarWidget"
-                implementation="com.openlinker.statusbar.OpenLinkerStatusBarWidgetFactory"/>
     </extensions>
 
     <actions>
@@ -24,8 +21,8 @@
         <action
                 id="com.openlinker.OpenCustomUrlAction"
                 class="com.openlinker.OpenCustomUrlAction"
-                text="Open Custom URL"
-                description="Open a browser URL using OpenLinker rules"
+                text="OpenLinker"
+                description="Open OpenLinker using configured rules"
                 icon="/icons/openlinkerBrowserOpen.svg">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
