@@ -134,7 +134,7 @@ class OpenLinkerRuleDialog(initialRule: CustomUrlRule? = null) : DialogWrapper(t
     }
 
     private fun initEditors() {
-        nameField.emptyText.text = "Google"
+        nameField.emptyText.text = "GitHub"
         urlTemplateArea.lineWrap = false
         urlTemplateArea.wrapStyleWord = false
         urlTemplateArea.font = Font(Font.MONOSPACED, Font.PLAIN, JBUI.scale(15))

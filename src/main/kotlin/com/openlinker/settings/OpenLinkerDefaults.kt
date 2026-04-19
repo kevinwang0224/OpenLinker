@@ -5,9 +5,9 @@ import com.openlinker.model.CustomUrlRule
 object OpenLinkerDefaults {
     fun defaultRules(): List<CustomUrlRule> = listOf(
         CustomUrlRule(
-            name = "Google",
-            urlTemplate = "https://www.google.com/search?q=${'$'}{PROJECT_NAME}",
-            enabled = true,
+            name = "GitHub(Example)",
+            urlTemplate = "https://github.com/your_username/${'$'}{PROJECT_NAME}",
+            enabled = false,
         ),
         CustomUrlRule(
             name = "File",

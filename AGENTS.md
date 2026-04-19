@@ -59,7 +59,7 @@
 
 ## 当前默认规则
 
-- `Google -> https://www.google.com/search?q=${PROJECT_NAME}`
+- `GitHub -> https://www.github.com/your_username/${PROJECT_NAME}`
 - `File -> file://${FILE_PATH}`
 
 ## 当前待办

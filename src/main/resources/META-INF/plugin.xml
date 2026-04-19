@@ -19,8 +19,8 @@
             <add-to-group group-id="MainToolbarRight" anchor="last"/>
         </action>
         <action
-                id="com.openlinker.OpenCustomUrlAction"
-                class="com.openlinker.OpenCustomUrlAction"
+                id="com.openlinker.OpenLinkerToolsMenu"
+                class="com.openlinker.OpenLinkerPopupAction"
                 text="OpenLinker"
                 description="Open OpenLinker using configured rules"
                 icon="/icons/openlinkerBrowserOpen.svg">
