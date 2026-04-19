@@ -36,7 +36,7 @@ intellijPlatform {
         id = "com.openlinker"
         name = "OpenLinker"
         version = project.version.toString()
-        description = "Open browser URLs from configurable OpenLinker rules."
+        description = "Open context-aware web or file links from customizable URL templates."
 
         ideaVersion {
             sinceBuild = "231"

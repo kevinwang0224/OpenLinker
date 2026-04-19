@@ -1,94 +1,95 @@
 # OpenLinker
 
-OpenLinker 是一个 IntelliJ IDEA 插件工程示例。它提供一个 `OpenLinker` 按钮，并在 `Settings > Tools > OpenLinker` 里管理多条 URL 规则。
+中文: [README_zh.md](README_zh.md)
 
-## 功能
+OpenLinker is a JetBrains IDE plugin that opens context-aware web or file links from customizable URL templates.
 
-- 提供一个 `OpenLinker` Action，入口在 `Tools` 菜单
-- 在顶部工具栏放一个 `OpenLinker` 图标，点击后会在图标旁边弹出一个小菜单
-- 支持多条规则，每条规则包含：
-  - `name`
-  - `urlTemplate`
-  - `enabled`
-- 支持变量：
-  - `${PROJECT_NAME}`
-  - `${MODULE_NAME}`
-  - `${FILE_NAME}`
-  - `${FILE_PATH}`
-- 执行逻辑：
-  - 0 条启用规则：提示去设置页配置
-  - 1 条启用规则：直接打开
-  - 多条启用规则：弹窗选择后打开
-- 普通地址使用 `BrowserUtil.browse()` 打开浏览器
-- `file://` 地址会在系统文件管理器里定位到文件或目录
-- 使用 `PersistentStateComponent` 持久化配置
-- 设置页左边规则栏带一个快速打开按钮，选中后可以直接点开
-- 支持把规则导出成 JSON 文件，也支持从 JSON 文件追加导入，方便团队共享
-- 默认内置规则：
-  - `Google -> https://www.google.com/search?q=${PROJECT_NAME}`
-  - `File -> file://${FILE_PATH}`
+### What it does
 
-## 环境要求
+- Opens links from the top toolbar icon and `Tools > OpenLinker` 
+- Builds URLs from customizable rules with placeholders (for project, module, and file context)
+- Handles both **web links** and `file://` paths (revealed in your system file manager)
+- Lets you manage, persist, import, and export rules from `Settings > Tools > OpenLinker`
 
-- Java 17
-- IntelliJ IDEA 2023.1 或更高版本
+### Installation
 
-## 运行
+This repository is currently set up as a source project. To try the plugin:
 
-1. 用 IntelliJ IDEA 打开工程。
-2. 确保 Gradle JVM 使用 Java 17。
-3. 运行 `runIde` 任务启动测试用 IDE。
+1. Open the project in IntelliJ IDEA
+2. Run `./gradlew runIde`
+3. In the sandbox IDE, use OpenLinker directly
 
-如果你更习惯命令行，也可以直接运行：
+### Quick Start
 
-```bash
-./gradlew runIde
-```
+1. Open `Settings > Tools > OpenLinker`
+2. Add, edit, import, or export rules
+3. Click `Tools > OpenLinker` (or use the top toolbar icon)
 
-## 使用方式
+### Screenshots
 
-1. 打开 `Settings > Tools > OpenLinker`
-2. 添加、修改、导入或导出规则
-3. 在菜单里点击 `Tools > OpenLinker`
+Toolbar popup:
 
-### 导入导出
+![OpenLinker toolbar popup](docs/images/openlinker-toolbar-menu.png)
 
-- 导出入口在设置页工具栏，支持导出全部规则，或只导出当前选中的规则
-- 导入入口也在设置页工具栏，导入内容会追加到当前列表末尾
-- 导入后的变更和普通编辑一样，要点 `Apply` 或 `OK` 才会真正保存
-- 导入导出文件使用 JSON，结构如下：
+Settings page (rules):
+
+![OpenLinker settings rules](docs/images/openlinker-settings-rules.png)
+
+### Import and Export
+
+- Export is available in the settings page toolbar; you can export all rules or only the selected rule
+- Import is also in the settings page toolbar; imported rules are appended to the end of the current list
+- Imported changes are like normal edits: click `Apply` or `OK` to persist them
+- Import/export files use JSON with this structure:
 
 ```json
 {
   "version": 1,
   "rules": [
     {
-      "name": "Google",
-      "urlTemplate": "https://www.google.com/search?q=${PROJECT_NAME}",
-      "enabled": true
+      "name": "GitHub(Example)",
+      "urlTemplate": "https://github.com/your_username/${PROJECT_NAME}",
+      "enabled": false
     }
   ]
 }
 ```
 
-## 变量说明
+### Variable Reference
 
-- `PROJECT_NAME`：当前项目名
-- `MODULE_NAME`：当前模块名；拿不到时为空
-- `FILE_NAME`：当前文件名；拿不到时为空
-- `FILE_PATH`：当前文件完整路径；拿不到时为空
+- `PROJECT_NAME`: current project name
+- `MODULE_NAME`: current module name; empty if unavailable
+- `FILE_NAME`: current file name; empty if unavailable
+- `FILE_PATH`: full path of the current file; empty if unavailable
 
-## 测试
+### Requirements
 
-工程里带了基础测试，覆盖这些核心情况：
+- Java 17
+- IntelliJ IDEA 2023.1 or later
 
-- 默认规则是否存在
-- 规则保存后的读取结果
-- 规则导入导出的 JSON 格式和校验
-- URL 模板变量替换
-- 0 条 / 1 条 / 多条启用规则的分支判断
+### Run Locally
 
-可运行：
+1. Open the project in IntelliJ IDEA.
+2. Make sure Gradle JVM is Java 17.
+3. Run the `runIde` task to start a sandbox IDE.
+
+If you prefer the command line:
+
+```bash
+./gradlew runIde
+```
+
+### Tests
+
+The project includes basic tests covering these core cases:
+
+- Whether default rules exist
+- Rule load results after persistence
+- JSON format and validation for rule import/export
+- URL template variable substitution
+- Decision branches for 0 / 1 / multiple enabled rules
+
+Run:
 
 ```bash
 ./gradlew test
