@@ -120,6 +120,13 @@ class OpenLinkerSettingsPanel {
 
     internal fun selectedRulesForTesting(): List<CustomUrlRule> = selectedRules()
 
+    internal fun isEnabledColumnEditableForTesting(row: Int): Boolean =
+        tableModel.isCellEditable(row, COLUMN_ENABLED)
+
+    internal fun setRuleEnabledForTesting(row: Int, enabled: Boolean) {
+        tableModel.setValueAt(enabled, row, COLUMN_ENABLED)
+    }
+
     internal fun toolbarActionState(): ToolbarActionState = ToolbarActionState(
         canRemove = hasSelection(),
         canEdit = hasSingleSelection(),
@@ -224,6 +231,10 @@ class OpenLinkerSettingsPanel {
 
         ruleTable.addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(event: MouseEvent) {
+                if (ruleTable.columnAtPoint(event.point) == COLUMN_ENABLED) {
+                    return
+                }
+
                 if (event.clickCount == 2 && event.button == MouseEvent.BUTTON1 && hasSingleSelection()) {
                     editSelectedRule()
                 }
@@ -525,7 +536,21 @@ class OpenLinkerSettingsPanel {
             else -> ""
         }
 
-        override fun isCellEditable(rowIndex: Int, columnIndex: Int): Boolean = false
+        override fun isCellEditable(rowIndex: Int, columnIndex: Int): Boolean = columnIndex == COLUMN_ENABLED
+
+        override fun setValueAt(value: Any?, rowIndex: Int, columnIndex: Int) {
+            if (columnIndex != COLUMN_ENABLED || rowIndex !in rules.indices) {
+                return
+            }
+
+            val enabled = value as? Boolean ?: return
+            if (rules[rowIndex].enabled == enabled) {
+                return
+            }
+
+            rules[rowIndex] = rules[rowIndex].copy(enabled = enabled)
+            fireTableRowsUpdated(rowIndex, rowIndex)
+        }
 
         fun setRules(rules: List<CustomUrlRule>) {
             this.rules.clear()

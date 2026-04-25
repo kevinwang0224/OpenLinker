@@ -6,15 +6,15 @@ import kotlin.test.assertEquals
 
 class OpenLinkerSettingsServiceTest {
     @Test
-    fun `starts with the default google rule`() {
+    fun `starts with the default rules`() {
         val service = OpenLinkerSettingsService()
 
         assertEquals(
             listOf(
                 CustomUrlRule(
-                    name = "Google",
-                    urlTemplate = "https://www.google.com/search?q=${'$'}{PROJECT_NAME}",
-                    enabled = true,
+                    name = "GitHub(Example)",
+                    urlTemplate = "https://github.com/your_username/${'$'}{PROJECT_NAME}",
+                    enabled = false,
                 ),
                 CustomUrlRule(
                     name = "File",

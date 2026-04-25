@@ -81,6 +81,25 @@ class OpenLinkerSettingsPanelTest {
     }
 
     @Test
+    fun `enabled column can update rule state directly`() {
+        val panel = OpenLinkerSettingsPanel()
+        panel.reset(
+            listOf(
+                CustomUrlRule(name = "Docs", urlTemplate = "https://example.com/docs", enabled = true),
+            ),
+        )
+
+        assertTrue(panel.isEnabledColumnEditableForTesting(0))
+
+        panel.setRuleEnabledForTesting(0, false)
+
+        assertEquals(
+            listOf(CustomUrlRule(name = "Docs", urlTemplate = "https://example.com/docs", enabled = false)),
+            panel.getValidatedRules(),
+        )
+    }
+
+    @Test
     fun `multi selection disables single rule actions and enables bulk actions`() {
         val panel = OpenLinkerSettingsPanel()
         panel.reset(
