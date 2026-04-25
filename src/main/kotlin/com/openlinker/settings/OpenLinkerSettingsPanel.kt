@@ -1,7 +1,6 @@
 package com.openlinker.settings
 
 import com.intellij.icons.AllIcons
-import com.intellij.ide.BrowserUtil
 import com.intellij.ide.actions.RevealFileAction
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.actionSystem.ActionManager
@@ -25,7 +24,9 @@ import com.intellij.util.ui.JBUI
 import com.openlinker.OpenLinkerConstants
 import com.openlinker.OpenLinkerIcons
 import com.openlinker.OpenLinkerResolvedUrl
+import com.openlinker.browser.OpenLinkerBrowsers
 import com.openlinker.model.CustomUrlRule
+import com.openlinker.model.OpenLinkerBrowserPreference
 import com.openlinker.model.normalized
 import com.openlinker.url.OpenLinkerContext
 import com.openlinker.url.OpenLinkerUrlTemplateResolver
@@ -42,6 +43,8 @@ import java.nio.file.Files
 import java.nio.file.Path
 import javax.swing.AbstractAction
 import javax.swing.BorderFactory
+import javax.swing.Box
+import javax.swing.BoxLayout
 import javax.swing.JCheckBox
 import javax.swing.JComponent
 import javax.swing.JPanel
@@ -57,6 +60,7 @@ import javax.swing.table.TableCellRenderer
 class OpenLinkerSettingsPanel {
     private val tableModel = RuleTableModel()
     private val ruleTable = JBTable(tableModel)
+    private val globalBrowserSelector = OpenLinkerBrowserSelector("System default browser")
 
     val component: JComponent
     val preferredFocusedComponent: JComponent
@@ -73,6 +77,11 @@ class OpenLinkerSettingsPanel {
     }
 
     fun reset(rules: List<CustomUrlRule>) {
+        reset(OpenLinkerBrowserPreference(), rules)
+    }
+
+    fun reset(globalBrowserPreference: OpenLinkerBrowserPreference, rules: List<CustomUrlRule>) {
+        globalBrowserSelector.setPreference(globalBrowserPreference)
         tableModel.setRules(rules.normalized())
         if (tableModel.rowCount > 0) {
             selectRow(0)
@@ -82,8 +91,15 @@ class OpenLinkerSettingsPanel {
     }
 
     fun isModified(savedRules: List<CustomUrlRule>): Boolean {
-        return tableModel.rules() != savedRules.normalized()
+        return isModified(OpenLinkerBrowserPreference(), savedRules)
     }
+
+    fun isModified(savedGlobalBrowserPreference: OpenLinkerBrowserPreference, savedRules: List<CustomUrlRule>): Boolean {
+        return globalBrowserSelector.getPreference() != savedGlobalBrowserPreference.normalized() ||
+            tableModel.rules() != savedRules.normalized()
+    }
+
+    fun getGlobalBrowserPreference(): OpenLinkerBrowserPreference = globalBrowserSelector.getPreference()
 
     @Throws(ConfigurationException::class)
     fun getValidatedRules(): List<CustomUrlRule> {
@@ -137,20 +153,14 @@ class OpenLinkerSettingsPanel {
     )
 
     private fun buildHeaderPanel(): JComponent {
-        val noteColor = UIManager.getColor("Label.disabledForeground")
-            ?: SimpleTextAttributes.GRAYED_ATTRIBUTES.fgColor
-            ?: Color.GRAY
-
-        return JBPanel<JBPanel<*>>(BorderLayout()).apply {
-            add(
-                JBLabel(
-                    "<html>Rules are shown in the same order as the action chooser.<br/>" +
-                        "Import or export JSON files here when sharing rules with your team.</html>",
-                ).apply {
-                    foreground = noteColor
-                },
-                BorderLayout.NORTH,
-            )
+        return JBPanel<JBPanel<*>>().apply {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
+            add(JPanel(BorderLayout(JBUI.scale(8), 0)).apply {
+                isOpaque = false
+                add(JBLabel("Global browser:"), BorderLayout.WEST)
+                add(globalBrowserSelector.component, BorderLayout.CENTER)
+            })
+            add(Box.createVerticalStrut(JBUI.scale(8)))
         }
     }
 
@@ -221,8 +231,10 @@ class OpenLinkerSettingsPanel {
         ruleTable.columnModel.getColumn(COLUMN_ENABLED).preferredWidth = JBUI.scale(88)
         ruleTable.columnModel.getColumn(COLUMN_ENABLED).maxWidth = JBUI.scale(88)
         ruleTable.columnModel.getColumn(COLUMN_NAME).preferredWidth = JBUI.scale(220)
-        ruleTable.columnModel.getColumn(COLUMN_TEMPLATE).preferredWidth = JBUI.scale(540)
+        ruleTable.columnModel.getColumn(COLUMN_BROWSER).preferredWidth = JBUI.scale(160)
+        ruleTable.columnModel.getColumn(COLUMN_TEMPLATE).preferredWidth = JBUI.scale(500)
         ruleTable.columnModel.getColumn(COLUMN_NAME).cellRenderer = RuleTextRenderer(tableModel, COLUMN_NAME)
+        ruleTable.columnModel.getColumn(COLUMN_BROWSER).cellRenderer = RuleTextRenderer(tableModel, COLUMN_BROWSER)
         ruleTable.columnModel.getColumn(COLUMN_TEMPLATE).cellRenderer = RuleTextRenderer(tableModel, COLUMN_TEMPLATE)
 
         if (ApplicationManager.getApplication() != null) {
@@ -392,7 +404,11 @@ class OpenLinkerSettingsPanel {
         }
 
         try {
-            BrowserUtil.browse(resolvedUrl)
+            OpenLinkerBrowsers.browse(
+                null,
+                resolvedUrl,
+                OpenLinkerBrowsers.effectivePreference(rule.browserPreference, getGlobalBrowserPreference()),
+            )
         } catch (_: Exception) {
             Messages.showErrorDialog(
                 "OpenLinker could not open this address:\n$resolvedUrl",
@@ -515,11 +531,12 @@ class OpenLinkerSettingsPanel {
 
         override fun getRowCount(): Int = rules.size
 
-        override fun getColumnCount(): Int = 3
+        override fun getColumnCount(): Int = 4
 
         override fun getColumnName(column: Int): String = when (column) {
             COLUMN_ENABLED -> "Enabled"
             COLUMN_NAME -> "Rule Name"
+            COLUMN_BROWSER -> "Browser"
             COLUMN_TEMPLATE -> "Configuration"
             else -> ""
         }
@@ -532,6 +549,7 @@ class OpenLinkerSettingsPanel {
         override fun getValueAt(rowIndex: Int, columnIndex: Int): Any = when (columnIndex) {
             COLUMN_ENABLED -> rules[rowIndex].enabled
             COLUMN_NAME -> rules[rowIndex].name
+            COLUMN_BROWSER -> OpenLinkerBrowsers.displayName(rules[rowIndex].browserPreference, "Global default")
             COLUMN_TEMPLATE -> rules[rowIndex].urlTemplate
             else -> ""
         }
@@ -754,6 +772,7 @@ class OpenLinkerSettingsPanel {
     private companion object {
         const val COLUMN_ENABLED = 0
         const val COLUMN_NAME = 1
-        const val COLUMN_TEMPLATE = 2
+        const val COLUMN_BROWSER = 2
+        const val COLUMN_TEMPLATE = 3
     }
 }

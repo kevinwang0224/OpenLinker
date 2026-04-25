@@ -8,6 +8,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class OpenLinkerRuleFileTransferTest {
@@ -18,7 +19,13 @@ class OpenLinkerRuleFileTransferTest {
         val exportedText = OpenLinkerRuleFileTransfer.exportText(
             listOf(
                 CustomUrlRule(name = "First", urlTemplate = "https://example.com/first", enabled = true),
-                CustomUrlRule(name = "Second", urlTemplate = "file://${'$'}{FILE_PATH}", enabled = false),
+                CustomUrlRule(
+                    name = "Second",
+                    urlTemplate = "file://${'$'}{FILE_PATH}",
+                    enabled = false,
+                    browserId = "browser-id",
+                    browserName = "Chrome",
+                ),
             ),
         )
 
@@ -29,6 +36,8 @@ class OpenLinkerRuleFileTransferTest {
         assertEquals("First", rules[0].jsonObject.getValue("name").jsonPrimitive.content)
         assertEquals("Second", rules[1].jsonObject.getValue("name").jsonPrimitive.content)
         assertEquals("false", rules[1].jsonObject.getValue("enabled").jsonPrimitive.content)
+        assertFalse("browserId" in rules[1].jsonObject)
+        assertFalse("browserName" in rules[1].jsonObject)
     }
 
     @Test
@@ -57,6 +66,37 @@ class OpenLinkerRuleFileTransferTest {
         assertEquals(2, importResult.skippedEntries.size)
         assertEquals("Rule name cannot be empty.", importResult.skippedEntries[0].reason)
         assertEquals("Enabled must be true or false.", importResult.skippedEntries[1].reason)
+    }
+
+    @Test
+    fun `imports ignore browser fields from rule files`() {
+        val importResult = OpenLinkerRuleFileTransfer.parseImportText(
+            """
+            {
+              "version": 1,
+              "rules": [
+                {
+                  "name": "Docs",
+                  "urlTemplate": "https://example.com/docs",
+                  "enabled": true,
+                  "browserId": "browser-id",
+                  "browserName": "Old Chrome"
+                }
+              ]
+            }
+            """.trimIndent(),
+        )
+
+        assertEquals(
+            listOf(
+                CustomUrlRule(
+                    name = "Docs",
+                    urlTemplate = "https://example.com/docs",
+                    enabled = true,
+                ),
+            ),
+            importResult.rules,
+        )
     }
 
     @Test

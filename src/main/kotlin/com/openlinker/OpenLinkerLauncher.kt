@@ -1,6 +1,5 @@
 package com.openlinker
 
-import com.intellij.ide.BrowserUtil
 import com.intellij.ide.actions.RevealFileAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.options.ShowSettingsUtil
@@ -9,6 +8,7 @@ import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.ui.ColoredListCellRenderer
 import com.intellij.ui.SimpleTextAttributes
+import com.openlinker.browser.OpenLinkerBrowsers
 import com.openlinker.model.CustomUrlRule
 import com.openlinker.settings.OpenLinkerConfigurable
 import com.openlinker.settings.OpenLinkerSettingsService
@@ -49,7 +49,8 @@ object OpenLinkerLauncher {
         context: OpenLinkerContext,
         showChooser: (List<CustomUrlRule>) -> Unit,
     ) {
-        when (val decision = OpenLinkerRuleDecider.decide(OpenLinkerSettingsService.getInstance().getRules())) {
+        val settings = OpenLinkerSettingsService.getInstance()
+        when (val decision = OpenLinkerRuleDecider.decide(settings.getRules())) {
             OpenLinkerRuleDecision.NoEnabledRules -> showMissingRulesPrompt(project)
             is OpenLinkerRuleDecision.SingleRule -> openResolvedRule(project, decision.rule, context)
             is OpenLinkerRuleDecision.MultipleRules -> showChooser(decision.rules)
@@ -131,7 +132,12 @@ object OpenLinkerLauncher {
                 return
             }
 
-            BrowserUtil.browse(resolvedUrl)
+            val settings = OpenLinkerSettingsService.getInstance()
+            OpenLinkerBrowsers.browse(
+                project,
+                resolvedUrl,
+                OpenLinkerBrowsers.effectivePreference(rule.browserPreference, settings.getGlobalBrowserPreference()),
+            )
         } catch (_: Exception) {
             Messages.showErrorDialog(
                 project,

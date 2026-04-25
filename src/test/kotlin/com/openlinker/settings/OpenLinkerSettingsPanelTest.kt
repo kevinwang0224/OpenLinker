@@ -1,6 +1,7 @@
 package com.openlinker.settings
 
 import com.openlinker.model.CustomUrlRule
+import com.openlinker.model.OpenLinkerBrowserPreference
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -97,6 +98,20 @@ class OpenLinkerSettingsPanelTest {
             listOf(CustomUrlRule(name = "Docs", urlTemplate = "https://example.com/docs", enabled = false)),
             panel.getValidatedRules(),
         )
+    }
+
+    @Test
+    fun `global browser preference participates in modification state`() {
+        val panel = OpenLinkerSettingsPanel()
+        val savedBrowser = OpenLinkerBrowserPreference(
+            browserId = "browser-id",
+            browserName = "Chrome",
+        )
+
+        panel.reset(savedBrowser, emptyList())
+
+        assertFalse(panel.isModified(savedBrowser, emptyList()))
+        assertTrue(panel.isModified(OpenLinkerBrowserPreference(), emptyList()))
     }
 
     @Test

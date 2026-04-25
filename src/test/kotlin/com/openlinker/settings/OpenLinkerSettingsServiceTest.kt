@@ -1,6 +1,7 @@
 package com.openlinker.settings
 
 import com.openlinker.model.CustomUrlRule
+import com.openlinker.model.OpenLinkerBrowserPreference
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -68,6 +69,46 @@ class OpenLinkerSettingsServiceTest {
                 ),
             ),
             service.getEnabledRules(),
+        )
+    }
+
+    @Test
+    fun `stores global and rule browser preferences`() {
+        val service = OpenLinkerSettingsService()
+        service.setSettings(
+            OpenLinkerBrowserPreference(
+                browserId = " global-browser-id ",
+                browserName = " Chrome ",
+            ),
+            listOf(
+                CustomUrlRule(
+                    name = " Docs ",
+                    urlTemplate = " https://example.com/docs ",
+                    enabled = true,
+                    browserId = " rule-browser-id ",
+                    browserName = " Firefox ",
+                ),
+            ),
+        )
+
+        assertEquals(
+            OpenLinkerBrowserPreference(
+                browserId = "global-browser-id",
+                browserName = "Chrome",
+            ),
+            service.getGlobalBrowserPreference(),
+        )
+        assertEquals(
+            listOf(
+                CustomUrlRule(
+                    name = "Docs",
+                    urlTemplate = "https://example.com/docs",
+                    enabled = true,
+                    browserId = "rule-browser-id",
+                    browserName = "Firefox",
+                ),
+            ),
+            service.getRules(),
         )
     }
 }

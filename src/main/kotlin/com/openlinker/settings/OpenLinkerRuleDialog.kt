@@ -10,6 +10,7 @@ import com.intellij.ui.components.JBTextArea
 import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.JBUI
 import com.openlinker.model.CustomUrlRule
+import com.openlinker.model.OpenLinkerBrowserPreference
 import java.awt.BorderLayout
 import java.awt.Cursor
 import java.awt.Dimension
@@ -28,20 +29,27 @@ import javax.swing.UIManager
 class OpenLinkerRuleDialog(initialRule: CustomUrlRule? = null) : DialogWrapper(true) {
     private val nameField = JBTextField(initialRule?.name.orEmpty())
     private val enabledCheckBox = JBCheckBox("Enabled", initialRule?.enabled ?: true)
+    private val browserSelector = OpenLinkerBrowserSelector("Global default")
     private val urlTemplateArea = JBTextArea(initialRule?.urlTemplate.orEmpty(), 10, 0)
 
     init {
         title = if (initialRule == null) "Add Rule" else "Edit Rule"
+        browserSelector.setPreference(initialRule?.browserPreference ?: OpenLinkerBrowserPreference())
         initEditors()
         init()
         initValidation()
     }
 
-    fun getRule(): CustomUrlRule = CustomUrlRule(
-        name = nameField.text.trim(),
-        urlTemplate = urlTemplateArea.text.trim(),
-        enabled = enabledCheckBox.isSelected,
-    )
+    fun getRule(): CustomUrlRule {
+        val browserPreference = browserSelector.getPreference()
+        return CustomUrlRule(
+            name = nameField.text.trim(),
+            urlTemplate = urlTemplateArea.text.trim(),
+            enabled = enabledCheckBox.isSelected,
+            browserId = browserPreference.browserId,
+            browserName = browserPreference.browserName,
+        )
+    }
 
     override fun createCenterPanel(): JComponent {
         val editorScrollPane = JBScrollPane(urlTemplateArea).apply {
@@ -61,6 +69,8 @@ class OpenLinkerRuleDialog(initialRule: CustomUrlRule? = null) : DialogWrapper(t
             })
             add(Box.createVerticalStrut(JBUI.scale(12)))
             add(labeled("Rule name:", nameField))
+            add(Box.createVerticalStrut(JBUI.scale(14)))
+            add(labeled("Browser:", browserSelector.component))
             add(Box.createVerticalStrut(JBUI.scale(14)))
             add(buildEditorHeader())
             add(Box.createVerticalStrut(JBUI.scale(8)))

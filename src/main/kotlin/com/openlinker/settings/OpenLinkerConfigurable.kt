@@ -16,7 +16,8 @@ class OpenLinkerConfigurable : SearchableConfigurable, Configurable.NoScroll {
 
     override fun createComponent(): JComponent {
         val panel = settingsPanel ?: OpenLinkerSettingsPanel().also {
-            it.reset(OpenLinkerSettingsService.getInstance().getRules())
+            val service = OpenLinkerSettingsService.getInstance()
+            it.reset(service.getGlobalBrowserPreference(), service.getRules())
             settingsPanel = it
         }
         return panel.component
@@ -26,18 +27,23 @@ class OpenLinkerConfigurable : SearchableConfigurable, Configurable.NoScroll {
 
     override fun isModified(): Boolean {
         val panel = settingsPanel ?: return false
-        return panel.isModified(OpenLinkerSettingsService.getInstance().getRules())
+        val service = OpenLinkerSettingsService.getInstance()
+        return panel.isModified(service.getGlobalBrowserPreference(), service.getRules())
     }
 
     @Throws(ConfigurationException::class)
     override fun apply() {
         val panel = settingsPanel ?: return
-        OpenLinkerSettingsService.getInstance().setRules(panel.getValidatedRules())
+        OpenLinkerSettingsService.getInstance().setSettings(
+            panel.getGlobalBrowserPreference(),
+            panel.getValidatedRules(),
+        )
         ApplicationManager.getApplication().saveSettings()
     }
 
     override fun reset() {
-        settingsPanel?.reset(OpenLinkerSettingsService.getInstance().getRules())
+        val service = OpenLinkerSettingsService.getInstance()
+        settingsPanel?.reset(service.getGlobalBrowserPreference(), service.getRules())
     }
 
     override fun disposeUIResources() {

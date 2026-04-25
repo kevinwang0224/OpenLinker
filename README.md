@@ -8,6 +8,7 @@ OpenLinker is a JetBrains IDE plugin that opens context-aware web or file links 
 
 - Opens links from the top toolbar icon and `Tools > OpenLinker` 
 - Builds URLs from customizable rules with placeholders (for project, module, and file context)
+- Lets you choose a global browser and override it for individual rules
 - Handles both **web links** and `file://` paths (revealed in your system file manager)
 - Lets you manage, persist, import, and export rules from `Settings > Tools > OpenLinker`
 
@@ -54,6 +55,8 @@ Settings page (rules):
   ]
 }
 ```
+
+Browser selections are personal settings and are not included in import/export files.
 
 ### Variable Reference
 

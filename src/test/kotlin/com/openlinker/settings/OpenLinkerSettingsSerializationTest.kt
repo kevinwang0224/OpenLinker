@@ -8,14 +8,18 @@ import kotlin.test.assertTrue
 
 class OpenLinkerSettingsSerializationTest {
     @Test
-    fun `settings state serializes rules`() {
+    fun `settings state serializes browser preferences and rules`() {
         val state = OpenLinkerSettingsService.SettingsState().apply {
+            globalBrowserId = "global-browser-id"
+            globalBrowserName = "Chrome"
             rules = mutableListOf(
                 OpenLinkerSettingsService.RuleState(
                     CustomUrlRule(
                         name = "Docs",
                         urlTemplate = "https://example.com/${'$'}{PROJECT_NAME}",
                         enabled = true,
+                        browserId = "rule-browser-id",
+                        browserName = "Firefox",
                     ),
                 ),
             )
@@ -23,7 +27,11 @@ class OpenLinkerSettingsSerializationTest {
         val element = XmlSerializer.serialize(state)
 
         val xml = XMLOutputter().outputString(element)
+        assertTrue(xml.contains("global-browser-id"))
+        assertTrue(xml.contains("Chrome"))
         assertTrue(xml.contains("Docs"))
         assertTrue(xml.contains("https://example.com/${'$'}{PROJECT_NAME}"))
+        assertTrue(xml.contains("rule-browser-id"))
+        assertTrue(xml.contains("Firefox"))
     }
 }
