@@ -31,6 +31,12 @@ object OpenLinkerEntryPopup {
         }
     }
 
+    fun showCenteredForAction(event: AnActionEvent) {
+        val project = event.project ?: return
+        val context = OpenLinkerContextResolver.resolve(project, event)
+        createPopup(project, context, event.dataContext).showCenteredInCurrentWindow(project)
+    }
+
     fun showForMouseEvent(project: Project, event: MouseEvent) {
         val dataContext = DataManager.getInstance().getDataContext(event.component, event.x, event.y)
         val context = OpenLinkerContextResolver.resolve(project)

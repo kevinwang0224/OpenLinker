@@ -20,7 +20,7 @@
         </action>
         <action
                 id="com.openlinker.OpenLinkerToolsMenu"
-                class="com.openlinker.OpenLinkerPopupAction"
+                class="com.openlinker.OpenLinkerToolsMenuAction"
                 text="OpenLinker"
                 description="Open OpenLinker using configured rules"
                 icon="/icons/openlinkerBrowserOpen.svg">
