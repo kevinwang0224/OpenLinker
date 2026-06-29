@@ -74,7 +74,11 @@ object OpenLinkerEntryPopup {
         private val project: Project,
         private val context: OpenLinkerContext,
         private val rule: CustomUrlRule,
-    ) : DumbAwareAction(rule.name.ifBlank { rule.urlTemplate }, rule.urlTemplate, OpenLinkerIcons.BROWSER_OPEN) {
+    ) : DumbAwareAction(
+        rule.name.ifBlank { rule.urlTemplateForProject(context.projectName) },
+        rule.urlTemplateForProject(context.projectName),
+        OpenLinkerIcons.BROWSER_OPEN,
+    ) {
         override fun actionPerformed(event: AnActionEvent) {
             OpenLinkerLauncher.openRule(project, rule, context)
         }

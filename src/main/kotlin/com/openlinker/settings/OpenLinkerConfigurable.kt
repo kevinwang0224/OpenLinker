@@ -4,10 +4,11 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.options.ConfigurationException
 import com.intellij.openapi.options.SearchableConfigurable
+import com.intellij.openapi.project.Project
 import com.openlinker.OpenLinkerConstants
 import javax.swing.JComponent
 
-class OpenLinkerConfigurable : SearchableConfigurable, Configurable.NoScroll {
+class OpenLinkerConfigurable(private val project: Project? = null) : SearchableConfigurable, Configurable.NoScroll {
     private var settingsPanel: OpenLinkerSettingsPanel? = null
 
     override fun getId(): String = OpenLinkerConstants.SETTINGS_ID
@@ -15,7 +16,7 @@ class OpenLinkerConfigurable : SearchableConfigurable, Configurable.NoScroll {
     override fun getDisplayName(): String = OpenLinkerConstants.PLUGIN_NAME
 
     override fun createComponent(): JComponent {
-        val panel = settingsPanel ?: OpenLinkerSettingsPanel().also {
+        val panel = settingsPanel ?: OpenLinkerSettingsPanel(project?.name.orEmpty()).also {
             val service = OpenLinkerSettingsService.getInstance()
             it.reset(service.getGlobalBrowserPreference(), service.getRules())
             settingsPanel = it

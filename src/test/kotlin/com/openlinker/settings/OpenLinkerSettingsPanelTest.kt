@@ -2,6 +2,7 @@ package com.openlinker.settings
 
 import com.openlinker.model.CustomUrlRule
 import com.openlinker.model.OpenLinkerBrowserPreference
+import com.openlinker.model.ProjectUrlOverride
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -156,5 +157,30 @@ class OpenLinkerSettingsPanelTest {
         assertTrue(state.canMoveDown)
         assertTrue(state.canOpen)
         assertTrue(state.canExportSelected)
+    }
+
+    @Test
+    fun `configuration column shows current project override when available`() {
+        val panel = OpenLinkerSettingsPanel(currentProjectName = "OpenLinker")
+        panel.reset(
+            listOf(
+                CustomUrlRule(
+                    name = "Docs",
+                    urlTemplate = "https://example.com/global",
+                    enabled = true,
+                    projectOverrides = listOf(
+                        ProjectUrlOverride(
+                            projectName = "OpenLinker",
+                            urlTemplate = "https://example.com/openlinker",
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(
+            "Project override: https://example.com/openlinker",
+            panel.configurationTextForTesting(0),
+        )
     }
 }

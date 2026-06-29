@@ -2,6 +2,7 @@ package com.openlinker.settings
 
 import com.openlinker.model.CustomUrlRule
 import com.openlinker.model.OpenLinkerBrowserPreference
+import com.openlinker.model.ProjectUrlOverride
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -106,6 +107,43 @@ class OpenLinkerSettingsServiceTest {
                     enabled = true,
                     browserId = "rule-browser-id",
                     browserName = "Firefox",
+                ),
+            ),
+            service.getRules(),
+        )
+    }
+
+    @Test
+    fun `stores project overrides with rules`() {
+        val service = OpenLinkerSettingsService()
+        service.setRules(
+            listOf(
+                CustomUrlRule(
+                    name = " Docs ",
+                    urlTemplate = " https://example.com/global ",
+                    enabled = true,
+                    projectOverrides = listOf(
+                        ProjectUrlOverride(
+                            projectName = " OpenLinker ",
+                            urlTemplate = " https://example.com/openlinker ",
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                CustomUrlRule(
+                    name = "Docs",
+                    urlTemplate = "https://example.com/global",
+                    enabled = true,
+                    projectOverrides = listOf(
+                        ProjectUrlOverride(
+                            projectName = "OpenLinker",
+                            urlTemplate = "https://example.com/openlinker",
+                        ),
+                    ),
                 ),
             ),
             service.getRules(),

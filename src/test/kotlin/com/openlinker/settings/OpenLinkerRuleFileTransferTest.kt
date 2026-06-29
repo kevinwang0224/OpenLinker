@@ -1,6 +1,7 @@
 package com.openlinker.settings
 
 import com.openlinker.model.CustomUrlRule
+import com.openlinker.model.ProjectUrlOverride
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -18,7 +19,17 @@ class OpenLinkerRuleFileTransferTest {
     fun `exports rules with version and preserves order`() {
         val exportedText = OpenLinkerRuleFileTransfer.exportText(
             listOf(
-                CustomUrlRule(name = "First", urlTemplate = "https://example.com/first", enabled = true),
+                CustomUrlRule(
+                    name = "First",
+                    urlTemplate = "https://example.com/first",
+                    enabled = true,
+                    projectOverrides = listOf(
+                        ProjectUrlOverride(
+                            projectName = "OpenLinker",
+                            urlTemplate = "https://example.com/openlinker",
+                        ),
+                    ),
+                ),
                 CustomUrlRule(
                     name = "Second",
                     urlTemplate = "file://${'$'}{FILE_PATH}",
@@ -34,6 +45,18 @@ class OpenLinkerRuleFileTransferTest {
 
         assertEquals("1", root.getValue("version").jsonPrimitive.content)
         assertEquals("First", rules[0].jsonObject.getValue("name").jsonPrimitive.content)
+        assertEquals(
+            "OpenLinker",
+            rules[0].jsonObject
+                .getValue("projectOverrides").jsonArray[0].jsonObject
+                .getValue("projectName").jsonPrimitive.content,
+        )
+        assertEquals(
+            "https://example.com/openlinker",
+            rules[0].jsonObject
+                .getValue("projectOverrides").jsonArray[0].jsonObject
+                .getValue("urlTemplate").jsonPrimitive.content,
+        )
         assertEquals("Second", rules[1].jsonObject.getValue("name").jsonPrimitive.content)
         assertEquals("false", rules[1].jsonObject.getValue("enabled").jsonPrimitive.content)
         assertFalse("browserId" in rules[1].jsonObject)
@@ -66,6 +89,49 @@ class OpenLinkerRuleFileTransferTest {
         assertEquals(2, importResult.skippedEntries.size)
         assertEquals("Rule name cannot be empty.", importResult.skippedEntries[0].reason)
         assertEquals("Enabled must be true or false.", importResult.skippedEntries[1].reason)
+    }
+
+    @Test
+    fun `imports project overrides and skips invalid override entries only`() {
+        val importResult = OpenLinkerRuleFileTransfer.parseImportText(
+            """
+            {
+              "version": 1,
+              "rules": [
+                {
+                  "name": "Docs",
+                  "urlTemplate": "https://example.com/docs",
+                  "enabled": true,
+                  "projectOverrides": [
+                    { "projectName": " OpenLinker ", "urlTemplate": " https://example.com/openlinker " },
+                    { "projectName": "", "urlTemplate": "https://example.com/blank-project" },
+                    { "projectName": "Team", "urlTemplate": "" }
+                  ]
+                }
+              ]
+            }
+            """.trimIndent(),
+        )
+
+        assertEquals(
+            listOf(
+                CustomUrlRule(
+                    name = "Docs",
+                    urlTemplate = "https://example.com/docs",
+                    enabled = true,
+                    projectOverrides = listOf(
+                        ProjectUrlOverride(
+                            projectName = "OpenLinker",
+                            urlTemplate = "https://example.com/openlinker",
+                        ),
+                    ),
+                ),
+            ),
+            importResult.rules,
+        )
+        assertEquals(2, importResult.skippedEntries.size)
+        assertEquals("Project override project name cannot be empty.", importResult.skippedEntries[0].reason)
+        assertEquals("Project override URL template cannot be empty.", importResult.skippedEntries[1].reason)
     }
 
     @Test

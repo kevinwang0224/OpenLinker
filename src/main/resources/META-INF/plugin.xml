@@ -2,7 +2,7 @@
     <depends>com.intellij.modules.platform</depends>
 
     <extensions defaultExtensionNs="com.intellij">
-        <applicationConfigurable
+        <projectConfigurable
                 id="com.openlinker.settings"
                 displayName="OpenLinker"
                 parentId="tools"
