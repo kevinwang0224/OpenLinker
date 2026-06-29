@@ -8,6 +8,7 @@ OpenLinker is a JetBrains IDE plugin that opens context-aware web or file links 
 
 - Opens links from the top toolbar icon and `Tools > OpenLinker` 
 - Builds URLs from customizable rules with placeholders (for project, module, and file context)
+- Supports project-specific URL overrides on each rule
 - Lets you choose a global browser and override it for individual rules
 - Handles both **web links** and `file://` paths (revealed in your system file manager)
 - Lets you manage, persist, import, and export rules from `Settings > Tools > OpenLinker`
@@ -50,11 +51,19 @@ Settings page (rules):
     {
       "name": "GitHub(Example)",
       "urlTemplate": "https://github.com/your_username/${PROJECT_NAME}",
-      "enabled": false
+      "enabled": false,
+      "projectOverrides": [
+        {
+          "projectName": "OpenLinker",
+          "urlTemplate": "https://github.com/openlinker/${PROJECT_NAME}"
+        }
+      ]
     }
   ]
 }
 ```
+
+When a rule has a matching `projectOverrides` entry for the current project name, OpenLinker uses that project URL template instead of the rule's default `urlTemplate`.
 
 Browser selections are personal settings and are not included in import/export files.
 
@@ -89,6 +98,7 @@ The project includes basic tests covering these core cases:
 - Whether default rules exist
 - Rule load results after persistence
 - JSON format and validation for rule import/export
+- Project-specific rule overrides
 - URL template variable substitution
 - Decision branches for 0 / 1 / multiple enabled rules
 

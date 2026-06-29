@@ -11,7 +11,6 @@ import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.ui.popup.ListPopup
 import com.intellij.ui.awt.RelativePoint
 import com.openlinker.model.CustomUrlRule
-import com.openlinker.settings.OpenLinkerConfigurable
 import com.openlinker.settings.OpenLinkerSettingsService
 import com.openlinker.url.OpenLinkerContext
 import com.openlinker.url.OpenLinkerContextResolver
@@ -56,7 +55,7 @@ object OpenLinkerEntryPopup {
             addSeparator()
             add(object : DumbAwareAction("Open Settings", "Edit OpenLinker rules", null) {
                 override fun actionPerformed(event: AnActionEvent) {
-                    ShowSettingsUtil.getInstance().showSettingsDialog(project, OpenLinkerConfigurable::class.java)
+                    ShowSettingsUtil.getInstance().showSettingsDialog(project, OpenLinkerConstants.SETTINGS_ID)
                 }
             })
         }
@@ -74,7 +73,11 @@ object OpenLinkerEntryPopup {
         private val project: Project,
         private val context: OpenLinkerContext,
         private val rule: CustomUrlRule,
-    ) : DumbAwareAction(rule.name.ifBlank { rule.urlTemplate }, rule.urlTemplate, OpenLinkerIcons.BROWSER_OPEN) {
+    ) : DumbAwareAction(
+        rule.name.ifBlank { rule.urlTemplateForProject(context.projectName) },
+        rule.urlTemplateForProject(context.projectName),
+        OpenLinkerIcons.BROWSER_OPEN,
+    ) {
         override fun actionPerformed(event: AnActionEvent) {
             OpenLinkerLauncher.openRule(project, rule, context)
         }

@@ -57,8 +57,9 @@ import javax.swing.table.AbstractTableModel
 import javax.swing.table.DefaultTableCellRenderer
 import javax.swing.table.TableCellRenderer
 
-class OpenLinkerSettingsPanel {
-    private val tableModel = RuleTableModel()
+class OpenLinkerSettingsPanel(currentProjectName: String = "") {
+    private val currentProjectName = currentProjectName.trim()
+    private val tableModel = RuleTableModel(this.currentProjectName)
     private val ruleTable = JBTable(tableModel)
     private val globalBrowserSelector = OpenLinkerBrowserSelector("System default browser")
 
@@ -135,6 +136,8 @@ class OpenLinkerSettingsPanel {
     }
 
     internal fun selectedRulesForTesting(): List<CustomUrlRule> = selectedRules()
+
+    internal fun configurationTextForTesting(row: Int): String = tableModel.configurationText(row)
 
     internal fun isEnabledColumnEditableForTesting(row: Int): Boolean =
         tableModel.isCellEditable(row, COLUMN_ENABLED)
@@ -262,7 +265,7 @@ class OpenLinkerSettingsPanel {
     }
 
     private fun addRule() {
-        val dialog = OpenLinkerRuleDialog()
+        val dialog = OpenLinkerRuleDialog(currentProjectName = currentProjectName)
         if (!dialog.showAndGet()) {
             return
         }
@@ -277,7 +280,7 @@ class OpenLinkerSettingsPanel {
             return
         }
 
-        val dialog = OpenLinkerRuleDialog(tableModel.getRule(row))
+        val dialog = OpenLinkerRuleDialog(tableModel.getRule(row), currentProjectName)
         if (!dialog.showAndGet()) {
             return
         }
@@ -375,7 +378,10 @@ class OpenLinkerSettingsPanel {
 
     private fun openSelectedRule() {
         val rule = selectedRule() ?: return
-        val resolvedUrl = OpenLinkerUrlTemplateResolver.resolve(rule.urlTemplate, OpenLinkerContext()).trim()
+        val resolvedUrl = OpenLinkerUrlTemplateResolver.resolve(
+            rule.urlTemplateForProject(currentProjectName),
+            OpenLinkerContext(projectName = currentProjectName),
+        ).trim()
 
         if (!OpenLinkerResolvedUrl.canOpen(resolvedUrl)) {
             Messages.showWarningDialog(
@@ -446,7 +452,10 @@ class OpenLinkerSettingsPanel {
 
     private fun canOpenSelectedRule(): Boolean {
         val rule = selectedRule() ?: return false
-        val resolvedUrl = OpenLinkerUrlTemplateResolver.resolve(rule.urlTemplate, OpenLinkerContext()).trim()
+        val resolvedUrl = OpenLinkerUrlTemplateResolver.resolve(
+            rule.urlTemplateForProject(currentProjectName),
+            OpenLinkerContext(projectName = currentProjectName),
+        ).trim()
         return OpenLinkerResolvedUrl.canOpen(resolvedUrl)
     }
 
@@ -526,7 +535,7 @@ class OpenLinkerSettingsPanel {
         val canExportSelected: Boolean,
     )
 
-    private class RuleTableModel : AbstractTableModel() {
+    private class RuleTableModel(private val currentProjectName: String) : AbstractTableModel() {
         private val rules = mutableListOf<CustomUrlRule>()
 
         override fun getRowCount(): Int = rules.size
@@ -550,7 +559,7 @@ class OpenLinkerSettingsPanel {
             COLUMN_ENABLED -> rules[rowIndex].enabled
             COLUMN_NAME -> rules[rowIndex].name
             COLUMN_BROWSER -> OpenLinkerBrowsers.displayName(rules[rowIndex].browserPreference, "Global default")
-            COLUMN_TEMPLATE -> rules[rowIndex].urlTemplate
+            COLUMN_TEMPLATE -> configurationText(rowIndex)
             else -> ""
         }
 
@@ -579,6 +588,16 @@ class OpenLinkerSettingsPanel {
         fun rules(): List<CustomUrlRule> = rules.toList().normalized()
 
         fun getRule(row: Int): CustomUrlRule = rules[row]
+
+        fun configurationText(row: Int): String {
+            val rule = rules[row]
+            val projectUrlTemplate = rule.urlTemplateForProject(currentProjectName)
+            return if (currentProjectName.isNotBlank() && projectUrlTemplate != rule.urlTemplate) {
+                "Project override: $projectUrlTemplate"
+            } else {
+                rule.urlTemplate
+            }
+        }
 
         fun addRule(rule: CustomUrlRule): Int {
             val row = rules.size

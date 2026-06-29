@@ -6,6 +6,7 @@ OpenLinker 是一个 JetBrains IDE 插件，可基于可配置的 URL 模板，�
 
 - 可从顶部工具栏图标或 `Tools > OpenLinker` 打开链接
 - 支持通过可配置规则和占位变量（项目、模块、文件上下文）拼接 URL
+- 支持为单条规则配置项目级 URL 覆盖
 - 支持设置全局浏览器，也支持为单条规则单独指定浏览器
 - 同时支持 **网页链接** 与 `file://` 路径（会在系统文件管理器中定位）
 - 可在 `Settings > Tools > OpenLinker` 管理、持久化、导入和导出规则
@@ -48,11 +49,19 @@ OpenLinker 是一个 JetBrains IDE 插件，可基于可配置的 URL 模板，�
     {
       "name": "GitHub(Example)",
       "urlTemplate": "https://github.com/your_username/${PROJECT_NAME}",
-      "enabled": false
+      "enabled": false,
+      "projectOverrides": [
+        {
+          "projectName": "OpenLinker",
+          "urlTemplate": "https://github.com/openlinker/${PROJECT_NAME}"
+        }
+      ]
     }
   ]
 }
 ```
+
+当规则中存在与当前项目名匹配的 `projectOverrides` 时，OpenLinker 会优先使用项目级 URL 模板；否则继续使用规则的默认 `urlTemplate`。
 
 浏览器选择属于个人设置，不会包含在导入/导出文件里。
 
@@ -87,6 +96,7 @@ OpenLinker 是一个 JetBrains IDE 插件，可基于可配置的 URL 模板，�
 - 默认规则是否存在
 - 配置持久化后的规则读取结果
 - 规则导入/导出的 JSON 格式与校验
+- 项目级规则覆盖
 - URL 模板变量替换
 - 0 / 1 / 多条启用规则的分支决策
 

@@ -1,6 +1,7 @@
 package com.openlinker.settings
 
 import com.openlinker.model.CustomUrlRule
+import com.openlinker.model.ProjectUrlOverride
 import com.openlinker.model.normalized
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -54,6 +55,19 @@ object OpenLinkerRuleFileTransfer {
                                 put("name", rule.name)
                                 put("urlTemplate", rule.urlTemplate)
                                 put("enabled", rule.enabled)
+                                put(
+                                    "projectOverrides",
+                                    buildJsonArray {
+                                        rule.projectOverrides.forEach { projectOverride ->
+                                            add(
+                                                buildJsonObject {
+                                                    put("projectName", projectOverride.projectName)
+                                                    put("urlTemplate", projectOverride.urlTemplate)
+                                                },
+                                            )
+                                        }
+                                    },
+                                )
                             },
                         )
                     }
@@ -84,7 +98,10 @@ object OpenLinkerRuleFileTransfer {
 
         ruleEntries.forEachIndexed { index, entry ->
             when (val parseResult = parseRuleEntry(index + 1, entry)) {
-                is ParsedRule.Valid -> importedRules.add(parseResult.rule)
+                is ParsedRule.Valid -> {
+                    importedRules.add(parseResult.rule)
+                    skippedEntries.addAll(parseResult.issues)
+                }
                 is ParsedRule.Invalid -> skippedEntries.add(parseResult.issue)
             }
         }
@@ -121,13 +138,67 @@ object OpenLinkerRuleFileTransfer {
             return ParsedRule.Invalid(entryIndex, "URL template cannot be empty.")
         }
 
+        val projectOverrideResult = parseProjectOverrides(entryIndex, ruleObject["projectOverrides"])
         return ParsedRule.Valid(
             CustomUrlRule(
                 name = name,
                 urlTemplate = urlTemplate,
                 enabled = enabled,
+                projectOverrides = projectOverrideResult.projectOverrides,
             ).normalized(),
+            projectOverrideResult.issues,
         )
+    }
+
+    private fun parseProjectOverrides(entryIndex: Int, entry: JsonElement?): ProjectOverrideParseResult {
+        if (entry == null) {
+            return ProjectOverrideParseResult(emptyList(), emptyList())
+        }
+
+        val overrideEntries = entry as? JsonArray
+            ?: return ProjectOverrideParseResult(
+                emptyList(),
+                listOf(ImportIssue(entryIndex, "Project overrides must be a list.")),
+            )
+
+        val projectOverrides = mutableListOf<ProjectUrlOverride>()
+        val issues = mutableListOf<ImportIssue>()
+        overrideEntries.forEach { overrideEntry ->
+            val overrideObject = overrideEntry as? JsonObject
+            if (overrideObject == null) {
+                issues.add(ImportIssue(entryIndex, "Project override entry must be an object."))
+                return@forEach
+            }
+
+            val projectName = overrideObject.readString("projectName")
+            if (projectName == null) {
+                issues.add(ImportIssue(entryIndex, "Project override project name must be a string."))
+                return@forEach
+            }
+
+            val urlTemplate = overrideObject.readString("urlTemplate")
+            if (urlTemplate == null) {
+                issues.add(ImportIssue(entryIndex, "Project override URL template must be a string."))
+                return@forEach
+            }
+
+            when {
+                projectName.isBlank() -> issues.add(
+                    ImportIssue(entryIndex, "Project override project name cannot be empty."),
+                )
+                urlTemplate.isBlank() -> issues.add(
+                    ImportIssue(entryIndex, "Project override URL template cannot be empty."),
+                )
+                else -> projectOverrides.add(
+                    ProjectUrlOverride(
+                        projectName = projectName,
+                        urlTemplate = urlTemplate,
+                    ),
+                )
+            }
+        }
+
+        return ProjectOverrideParseResult(projectOverrides, issues)
     }
 
     private fun JsonObject.readString(fieldName: String): String? {
@@ -141,10 +212,18 @@ object OpenLinkerRuleFileTransfer {
     }
 
     private sealed interface ParsedRule {
-        data class Valid(val rule: CustomUrlRule) : ParsedRule
+        data class Valid(
+            val rule: CustomUrlRule,
+            val issues: List<ImportIssue> = emptyList(),
+        ) : ParsedRule
 
         data class Invalid(val issue: ImportIssue) : ParsedRule {
             constructor(entryIndex: Int, reason: String) : this(ImportIssue(entryIndex, reason))
         }
     }
+
+    private data class ProjectOverrideParseResult(
+        val projectOverrides: List<ProjectUrlOverride>,
+        val issues: List<ImportIssue>,
+    )
 }

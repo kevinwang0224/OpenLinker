@@ -10,7 +10,6 @@ import com.intellij.ui.ColoredListCellRenderer
 import com.intellij.ui.SimpleTextAttributes
 import com.openlinker.browser.OpenLinkerBrowsers
 import com.openlinker.model.CustomUrlRule
-import com.openlinker.settings.OpenLinkerConfigurable
 import com.openlinker.settings.OpenLinkerSettingsService
 import com.openlinker.url.OpenLinkerContext
 import com.openlinker.url.OpenLinkerContextResolver
@@ -68,7 +67,7 @@ object OpenLinkerLauncher {
         )
 
         if (result == Messages.YES) {
-            ShowSettingsUtil.getInstance().showSettingsDialog(project, OpenLinkerConfigurable::class.java)
+            ShowSettingsUtil.getInstance().showSettingsDialog(project, OpenLinkerConstants.SETTINGS_ID)
         }
     }
 
@@ -79,7 +78,7 @@ object OpenLinkerLauncher {
     ) = JBPopupFactory.getInstance()
         .createPopupChooserBuilder(rules)
         .setTitle(OpenLinkerConstants.PLUGIN_NAME)
-        .setNamerForFiltering { it.name.ifBlank { it.urlTemplate } }
+        .setNamerForFiltering { it.name.ifBlank { it.urlTemplateForProject(context.projectName) } }
         .setRenderer(object : ColoredListCellRenderer<CustomUrlRule>() {
             override fun customizeCellRenderer(
                 list: JList<out CustomUrlRule>,
@@ -92,17 +91,21 @@ object OpenLinkerLauncher {
                     return
                 }
 
-                append(value.name.ifBlank { value.urlTemplate })
-                if (value.urlTemplate.isNotBlank()) {
+                val urlTemplate = value.urlTemplateForProject(context.projectName)
+                append(value.name.ifBlank { urlTemplate })
+                if (urlTemplate.isNotBlank()) {
                     append("  ")
-                    append(value.urlTemplate, SimpleTextAttributes.GRAYED_ATTRIBUTES)
+                    append(urlTemplate, SimpleTextAttributes.GRAYED_ATTRIBUTES)
                 }
             }
         })
         .setItemChosenCallback { rule -> openResolvedRule(project, rule, context) }
 
     private fun openResolvedRule(project: Project, rule: CustomUrlRule, context: OpenLinkerContext) {
-        val resolvedUrl = OpenLinkerUrlTemplateResolver.resolve(rule.urlTemplate, context).trim()
+        val resolvedUrl = OpenLinkerUrlTemplateResolver.resolve(
+            rule.urlTemplateForProject(context.projectName),
+            context,
+        ).trim()
         if (!OpenLinkerResolvedUrl.canOpen(resolvedUrl)) {
             Messages.showWarningDialog(
                 project,

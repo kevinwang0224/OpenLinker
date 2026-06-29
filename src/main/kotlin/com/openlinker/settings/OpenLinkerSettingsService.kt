@@ -8,7 +8,9 @@ import com.intellij.openapi.components.State
 import com.intellij.openapi.components.Storage
 import com.openlinker.model.CustomUrlRule
 import com.openlinker.model.OpenLinkerBrowserPreference
+import com.openlinker.model.ProjectUrlOverride
 import com.openlinker.model.normalized
+import com.openlinker.model.normalizedProjectOverrides
 
 @Service(Service.Level.APP)
 @State(
@@ -78,6 +80,7 @@ class OpenLinkerSettingsService : PersistentStateComponent<OpenLinkerSettingsSer
         var enabled: Boolean = true
         var browserId: String = ""
         var browserName: String = ""
+        var projectOverrides: MutableList<ProjectOverrideState> = mutableListOf()
 
         constructor(rule: CustomUrlRule) : this() {
             name = rule.name
@@ -85,6 +88,7 @@ class OpenLinkerSettingsService : PersistentStateComponent<OpenLinkerSettingsSer
             enabled = rule.enabled
             browserId = rule.browserId
             browserName = rule.browserName
+            projectOverrides = rule.projectOverrides.normalizedProjectOverrides().map(::ProjectOverrideState).toMutableList()
         }
 
         fun toRule(): CustomUrlRule = CustomUrlRule(
@@ -93,6 +97,22 @@ class OpenLinkerSettingsService : PersistentStateComponent<OpenLinkerSettingsSer
             enabled = enabled,
             browserId = browserId,
             browserName = browserName,
+            projectOverrides = projectOverrides.map(ProjectOverrideState::toProjectOverride),
+        )
+    }
+
+    class ProjectOverrideState() {
+        var projectName: String = ""
+        var urlTemplate: String = ""
+
+        constructor(projectOverride: ProjectUrlOverride) : this() {
+            projectName = projectOverride.projectName
+            urlTemplate = projectOverride.urlTemplate
+        }
+
+        fun toProjectOverride(): ProjectUrlOverride = ProjectUrlOverride(
+            projectName = projectName,
+            urlTemplate = urlTemplate,
         )
     }
 
